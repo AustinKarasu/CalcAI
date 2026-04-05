@@ -25,6 +25,25 @@ class _KarasuAppState extends State<KarasuApp> {
     return FutureBuilder<CalculatorController>(
       future: _controllerFuture,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(
+              backgroundColor: const Color(0xFF090B11),
+              body: const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'CalcAI could not start cleanly. Restart the app to try again.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
         final controller = snapshot.data;
         if (controller == null) {
           return MaterialApp(
@@ -55,6 +74,7 @@ class _KarasuAppState extends State<KarasuApp> {
               debugShowCheckedModeBanner: false,
               title: 'CalcAI',
               theme: AppTheme.build(controller.activeTheme),
+              themeAnimationDuration: const Duration(milliseconds: 220),
               home: CalculatorScreen(controller: controller),
             );
           },

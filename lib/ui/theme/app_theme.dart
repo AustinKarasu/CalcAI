@@ -76,6 +76,54 @@ class AppTheme {
         bodyColor: palette.text,
         displayColor: palette.text,
       ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: palette.surface.withValues(alpha: 0.42),
+        indicatorColor: palette.primary.withValues(alpha: 0.18),
+        labelTextStyle: WidgetStatePropertyAll(
+          TextStyle(
+            color: palette.text.withValues(alpha: 0.9),
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: palette.primary,
+          foregroundColor: palette.background,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: palette.text,
+          side: BorderSide(color: palette.muted.withValues(alpha: 0.36)),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: palette.surface.withValues(alpha: 0.92),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: palette.muted.withValues(alpha: 0.14)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: palette.primary.withValues(alpha: 0.5)),
+        ),
+      ),
       chipTheme: ChipThemeData(
         backgroundColor: palette.surface,
         selectedColor: palette.secondary.withValues(alpha: 0.22),

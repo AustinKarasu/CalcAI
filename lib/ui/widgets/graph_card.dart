@@ -35,13 +35,24 @@ class GraphCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: CustomPaint(
-              painter: _GraphPainter(
-                points: points,
-                axisColor: Colors.white.withValues(alpha: 0.26),
-                lineColor: theme.colorScheme.primary,
+            child: RepaintBoundary(
+              child: CustomPaint(
+                painter: _GraphPainter(
+                  points: points,
+                  axisColor: Colors.white.withValues(alpha: 0.26),
+                  lineColor: theme.colorScheme.primary,
+                ),
+                child: const SizedBox.expand(),
               ),
-              child: const SizedBox.expand(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            points.isEmpty
+                ? 'No visible points in the current graph window.'
+                : 'Window: x -10..10, y -10..10',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.62),
             ),
           ),
         ],
@@ -63,6 +74,7 @@ class _GraphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.clipRect(Offset.zero & size);
     final axisPaint = Paint()
       ..color = axisColor
       ..strokeWidth = 1;

@@ -37,7 +37,7 @@ class CalculationEngine {
     for (var x = -10.0; x <= 10.0; x += 0.25) {
       final replaced = sanitized.replaceAll('x', '($x)');
       final result = _safeEval(replaced);
-      if (result != null && result.isFinite) {
+      if (result != null && result.isFinite && result >= -10 && result <= 10) {
         points.add(OffsetPoint(x, result));
       }
     }

@@ -27,6 +27,15 @@ class KeypadButton extends StatelessWidget {
           height: 68,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(26),
+            boxShadow: [
+              BoxShadow(
+                color: isAccent
+                    ? theme.colorScheme.primary.withValues(alpha: 0.18)
+                    : Colors.black.withValues(alpha: 0.12),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
             gradient: isAccent
                 ? LinearGradient(
                     colors: [
@@ -39,15 +48,16 @@ class KeypadButton extends StatelessWidget {
                 : null,
             color: isAccent
                 ? null
-                : theme.colorScheme.surface.withValues(alpha: 0.92),
+                : theme.colorScheme.surface.withValues(alpha: 0.96),
           ),
           child: Center(
             child: Text(
               label,
               style: TextStyle(
-                color: isAccent ? Colors.white : theme.colorScheme.onSurface,
-                fontSize: 28,
+                color: isAccent ? Colors.white : Colors.white,
+                fontSize: 26,
                 fontWeight: FontWeight.w700,
+                letterSpacing: -0.5,
               ),
             ),
           ),

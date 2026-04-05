@@ -11,6 +11,7 @@ import '../services/app_storage.dart';
 import '../services/calculation_engine.dart';
 import '../services/conversion_service.dart';
 import '../services/history_intelligence_service.dart';
+import '../services/openrouter_service.dart';
 import '../services/smart_query_service.dart';
 import '../services/voice_service.dart';
 
@@ -25,6 +26,7 @@ class CalculatorController extends ChangeNotifier {
         _historyService = historyService,
         _voiceService = voiceService {
     _smartQueryService = SmartQueryService(_engine, ConversionService());
+    _openRouterService = OpenRouterService();
   }
 
   static Future<CalculatorController> create() async {
@@ -44,6 +46,8 @@ class CalculatorController extends ChangeNotifier {
   final HistoryIntelligenceService _historyService;
   final VoiceService _voiceService;
   late final SmartQueryService _smartQueryService;
+  late final OpenRouterService _openRouterService;
+  Timer? _persistDebounce;
 
   CalculatorMode mode = CalculatorMode.focus;
   AppThemeMode activeTheme = AppThemeMode.neon;
@@ -61,6 +65,9 @@ class CalculatorController extends ChangeNotifier {
   bool saveHistoryEnabled = true;
   bool smartSuggestionsEnabled = true;
   bool speechAutoApplyEnabled = true;
+  bool remoteAiEnabled = true;
+  String openRouterApiKey = '';
+  String openRouterModel = 'openai/gpt-4o-mini';
   List<String> steps = const ['Tap = to evaluate.'];
   List<HistoryEntry> history = const [];
   List<SmartSuggestion> suggestions = const [];
@@ -85,6 +92,9 @@ class CalculatorController extends ChangeNotifier {
       saveHistoryEnabled = persisted.saveHistory;
       smartSuggestionsEnabled = persisted.smartSuggestions;
       speechAutoApplyEnabled = persisted.speechAutoApply;
+      openRouterApiKey = persisted.openRouterApiKey;
+      openRouterModel = persisted.openRouterModel;
+      remoteAiEnabled = persisted.remoteAiEnabled;
     } else {
       _seedDemoHistory();
     }
@@ -139,6 +149,23 @@ class CalculatorController extends ChangeNotifier {
     _persistAndNotify();
   }
 
+  void updateVisualExpression(String value) {
+    expression = value.trim().isEmpty ? 'y=x^2' : value.trim();
+    if (mode == CalculatorMode.visual) {
+      _evaluateCurrent();
+    }
+    _persistAndNotify();
+  }
+
+  void useVisualSample(String sample) {
+    expression = sample;
+    if (mode != CalculatorMode.visual) {
+      mode = CalculatorMode.visual;
+    }
+    _evaluateCurrent();
+    _persistAndNotify();
+  }
+
   void setLivePreview(bool value) {
     livePreviewEnabled = value;
     if (livePreviewEnabled) {
@@ -164,6 +191,21 @@ class CalculatorController extends ChangeNotifier {
 
   void setSpeechAutoApply(bool value) {
     speechAutoApplyEnabled = value;
+    _persistAndNotify();
+  }
+
+  void setRemoteAiEnabled(bool value) {
+    remoteAiEnabled = value;
+    _persistAndNotify();
+  }
+
+  void setOpenRouterApiKey(String value) {
+    openRouterApiKey = value.trim();
+    _persistAndNotify();
+  }
+
+  void setOpenRouterModel(String value) {
+    openRouterModel = value.trim().isEmpty ? 'openai/gpt-4o-mini' : value.trim();
     _persistAndNotify();
   }
 
@@ -208,24 +250,57 @@ class CalculatorController extends ChangeNotifier {
     );
   }
 
-  void runSmartQuery([String? override]) {
+  Future<void> runSmartQuery([String? override]) async {
     final query = (override ?? _queryController.text).trim();
     if (query.isEmpty) {
       return;
     }
-    final intent = _smartQueryService.parse(query, mode);
-    mode = intent.suggestedMode;
-    smartPrompt = query;
-    _queryController.text = query;
-    _applyCalculation(
-      intent.result,
-      originalQuery: query,
-      selectedMode: mode,
-    );
+    try {
+      final intent = _smartQueryService.parse(query, mode);
+      if (remoteAiEnabled &&
+          (intent.result.result == 'Need math' || intent.result.result == 'Error')) {
+        final remote = await _openRouterService.solve(
+          query: query,
+          apiKey: openRouterApiKey,
+          model: openRouterModel,
+          currentMode: mode,
+        );
+        if (remote != null && remote.errorMessage == null) {
+          mode = remote.suggestedMode;
+          smartPrompt = query;
+          _queryController.text = query;
+          _applyCalculation(
+            remote.calculation,
+            originalQuery: query,
+            selectedMode: mode,
+          );
+          return;
+        }
+        if (remote?.errorMessage != null) {
+          insight = remote!.errorMessage!;
+        }
+      }
+      mode = intent.suggestedMode;
+      smartPrompt = query;
+      _queryController.text = query;
+      _applyCalculation(
+        intent.result,
+        originalQuery: query,
+        selectedMode: mode,
+      );
+    } catch (_) {
+      result = 'AI unavailable';
+      steps = const [
+        'The assistant could not process that request right now.',
+        'Try a direct math phrase or review remote AI settings.',
+      ];
+      insight = 'Smart AI failed safely without interrupting the calculator.';
+      _persistAndNotify();
+    }
   }
 
   void useSuggestion(SmartSuggestion suggestion) {
-    runSmartQuery(suggestion.prefill);
+    unawaited(runSmartQuery(suggestion.prefill));
   }
 
   Future<void> toggleSign() async {
@@ -324,6 +399,7 @@ class CalculatorController extends ChangeNotifier {
       return;
     }
     expression = speechExpression;
+    setBottomTab(0);
     await _afterInputChanged();
   }
 
@@ -331,8 +407,9 @@ class CalculatorController extends ChangeNotifier {
     if (speechTranscript.isEmpty) {
       return;
     }
+    setBottomTab(1);
     _queryController.text = speechTranscript;
-    runSmartQuery(speechTranscript);
+    unawaited(runSmartQuery(speechTranscript));
   }
 
   String modeSubtitle() {
@@ -380,6 +457,16 @@ class CalculatorController extends ChangeNotifier {
 
   List<String> programmerShortcutTokens() {
     return const ['A', 'B', 'C', 'D', 'E', 'F', '0b', '0x', '&', '|', '^', '<<', '>>'];
+  }
+
+  String smartStatusLabel() {
+    if (!remoteAiEnabled) {
+      return 'Local AI only';
+    }
+    if (openRouterApiKey.isEmpty) {
+      return 'Remote AI needs key';
+    }
+    return 'Remote AI ready';
   }
 
   Future<void> _afterInputChanged() async {
@@ -568,23 +655,32 @@ class CalculatorController extends ChangeNotifier {
   }
 
   void _persistAndNotify() {
-    unawaited(
-      _storage.save(
-        PersistedAppState(
-          expression: expression,
-          result: result,
-          smartPrompt: smartPrompt,
-          insight: insight,
-          steps: steps,
-          mode: mode,
-          theme: activeTheme,
-          history: history,
-          livePreview: livePreviewEnabled,
-          saveHistory: saveHistoryEnabled,
-          smartSuggestions: smartSuggestionsEnabled,
-          speechAutoApply: speechAutoApplyEnabled,
-        ),
-      ),
+    _persistDebounce?.cancel();
+    _persistDebounce = Timer(
+      const Duration(milliseconds: 180),
+      () {
+        unawaited(
+          _storage.save(
+            PersistedAppState(
+              expression: expression,
+              result: result,
+              smartPrompt: smartPrompt,
+              insight: insight,
+              steps: steps,
+              mode: mode,
+              theme: activeTheme,
+              history: history,
+              livePreview: livePreviewEnabled,
+              saveHistory: saveHistoryEnabled,
+              smartSuggestions: smartSuggestionsEnabled,
+              speechAutoApply: speechAutoApplyEnabled,
+              openRouterApiKey: openRouterApiKey,
+              openRouterModel: openRouterModel,
+              remoteAiEnabled: remoteAiEnabled,
+            ),
+          ),
+        );
+      },
     );
     notifyListeners();
   }
@@ -594,6 +690,7 @@ class CalculatorController extends ChangeNotifier {
     if (isListening) {
       unawaited(_voiceService.stopListening());
     }
+    _persistDebounce?.cancel();
     _queryController.dispose();
     super.dispose();
   }

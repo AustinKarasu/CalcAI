@@ -18,6 +18,9 @@ class AppStorage {
   static const _saveHistoryKey = 'save_history';
   static const _smartSuggestionsKey = 'smart_suggestions';
   static const _speechAutoApplyKey = 'speech_auto_apply';
+  static const _openRouterApiKey = 'openrouter_api_key';
+  static const _openRouterModel = 'openrouter_model';
+  static const _remoteAiEnabled = 'remote_ai_enabled';
 
   final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
 
@@ -38,6 +41,10 @@ class AppStorage {
     final saveHistory = await _prefs.getBool(_saveHistoryKey) ?? true;
     final smartSuggestions = await _prefs.getBool(_smartSuggestionsKey) ?? true;
     final speechAutoApply = await _prefs.getBool(_speechAutoApplyKey) ?? true;
+    final openRouterApiKey = await _prefs.getString(_openRouterApiKey) ?? '';
+    final openRouterModel =
+        await _prefs.getString(_openRouterModel) ?? 'openai/gpt-4o-mini';
+    final remoteAiEnabled = await _prefs.getBool(_remoteAiEnabled) ?? true;
     final history = historyRaw
         .map((item) => jsonDecode(item) as Map<String, dynamic>)
         .map(HistoryEntry.fromJson)
@@ -56,6 +63,9 @@ class AppStorage {
       saveHistory: saveHistory,
       smartSuggestions: smartSuggestions,
       speechAutoApply: speechAutoApply,
+      openRouterApiKey: openRouterApiKey,
+      openRouterModel: openRouterModel,
+      remoteAiEnabled: remoteAiEnabled,
     );
   }
 
@@ -71,6 +81,9 @@ class AppStorage {
     await _prefs.setBool(_saveHistoryKey, state.saveHistory);
     await _prefs.setBool(_smartSuggestionsKey, state.smartSuggestions);
     await _prefs.setBool(_speechAutoApplyKey, state.speechAutoApply);
+    await _prefs.setString(_openRouterApiKey, state.openRouterApiKey);
+    await _prefs.setString(_openRouterModel, state.openRouterModel);
+    await _prefs.setBool(_remoteAiEnabled, state.remoteAiEnabled);
     await _prefs.setStringList(
       _historyKey,
       state.history.map((entry) => jsonEncode(entry.toJson())).toList(),
@@ -92,6 +105,9 @@ class PersistedAppState {
     required this.saveHistory,
     required this.smartSuggestions,
     required this.speechAutoApply,
+    required this.openRouterApiKey,
+    required this.openRouterModel,
+    required this.remoteAiEnabled,
   });
 
   final String expression;
@@ -106,4 +122,7 @@ class PersistedAppState {
   final bool saveHistory;
   final bool smartSuggestions;
   final bool speechAutoApply;
+  final String openRouterApiKey;
+  final String openRouterModel;
+  final bool remoteAiEnabled;
 }

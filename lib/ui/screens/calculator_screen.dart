@@ -18,7 +18,7 @@ class CalculatorScreen extends StatelessWidget {
 
   final CalculatorController controller;
   static final Uri _releaseUri =
-      Uri.parse('https://github.com/AustinKarasu/CalcAI/releases/latest');
+      Uri.parse('https://github.com/AustinKarasu/CalcAI/releases');
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +70,7 @@ class CalculatorScreen extends StatelessWidget {
                     label: 'AI',
                   ),
                   NavigationDestination(
-                    icon: Icon(Icons.history_rounded),
+                    icon: Icon(Icons.mic_rounded),
                     label: 'Speech',
                   ),
                   NavigationDestination(
@@ -110,6 +110,8 @@ class _CalculatorPage extends StatelessWidget {
           ),
           const SizedBox(height: 22),
           _DisplayCard(controller: controller),
+          const SizedBox(height: 14),
+          _StatusStrip(controller: controller),
           const SizedBox(height: 16),
           SizedBox(
             height: 40,
@@ -136,12 +138,14 @@ class _CalculatorPage extends StatelessWidget {
             _ProgrammerStrip(controller: controller),
           ],
           const SizedBox(height: 16),
-          if (controller.mode == CalculatorMode.visual)
+          if (controller.mode == CalculatorMode.visual) ...[
+            _VisualMathPanel(controller: controller),
+            const SizedBox(height: 16),
             GraphCard(
               points: controller.graphPoints,
               expression: controller.expression,
-            )
-          else
+            ),
+          ] else
             _Keypad(controller: controller),
         ],
       ),
@@ -289,10 +293,19 @@ class _HistoryPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _Header(
+          title: 'History',
+          badge: '${controller.history.length} items',
+          onSettingsTap: controller.openSettingsPage,
+        ),
+        const SizedBox(height: 18),
         Row(
           children: [
             Expanded(
-              child: Text('Recent History', style: theme.textTheme.headlineSmall),
+              child: Text(
+                'Recent calculations',
+                style: theme.textTheme.titleMedium,
+              ),
             ),
             TextButton.icon(
               onPressed: controller.history.isEmpty ? null : controller.clearHistory,
@@ -335,8 +348,12 @@ class _SettingsPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Settings', style: theme.textTheme.headlineSmall),
-        const SizedBox(height: 12),
+        _Header(
+          title: 'Settings',
+          badge: controller.activeTheme.label,
+          onSettingsTap: controller.openSettingsPage,
+        ),
+        const SizedBox(height: 18),
         Text(
           'Theme, accessibility, offline behavior, and release-readiness settings.',
           style: theme.textTheme.bodyMedium?.copyWith(
@@ -380,6 +397,38 @@ class _SettingsPage extends StatelessWidget {
           subtitle: 'Send recognized speech straight into the calculator.',
           value: controller.speechAutoApplyEnabled,
           onChanged: controller.setSpeechAutoApply,
+        ),
+        _SettingSwitchTile(
+          title: 'Remote AI',
+          subtitle: 'Use OpenRouter when local Smart AI cannot solve the query.',
+          value: controller.remoteAiEnabled,
+          onChanged: controller.setRemoteAiEnabled,
+        ),
+        const SizedBox(height: 4),
+        _ConfigActionTile(
+          title: 'OpenRouter API Key',
+          subtitle: controller.openRouterApiKey.isEmpty
+              ? 'Not configured'
+              : 'Configured',
+          buttonLabel: 'Edit Key',
+          onTap: () => _showTextConfigDialog(
+            context,
+            title: 'OpenRouter API Key',
+            initialValue: controller.openRouterApiKey,
+            obscureText: true,
+            onSave: controller.setOpenRouterApiKey,
+          ),
+        ),
+        _ConfigActionTile(
+          title: 'OpenRouter Model',
+          subtitle: controller.openRouterModel,
+          buttonLabel: 'Change Model',
+          onTap: () => _showTextConfigDialog(
+            context,
+            title: 'OpenRouter Model',
+            initialValue: controller.openRouterModel,
+            onSave: controller.setOpenRouterModel,
+          ),
         ),
         const SizedBox(height: 12),
         FilledButton.icon(
@@ -487,6 +536,20 @@ class _DisplayCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _DisplayBadge(
+                  label: controller.mode.label,
+                  icon: Icons.tune_rounded,
+                ),
+                _DisplayBadge(
+                  label: controller.smartStatusLabel(),
+                  icon: Icons.bolt_rounded,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
             Text(
               controller.formattedExpression(),
               style: theme.textTheme.titleMedium?.copyWith(
@@ -517,6 +580,122 @@ class _DisplayCard extends StatelessWidget {
   }
 }
 
+class _StatusStrip extends StatelessWidget {
+  const _StatusStrip({required this.controller});
+
+  final CalculatorController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _MiniStatusCard(
+            title: 'History',
+            value: '${controller.history.length} saved',
+            icon: Icons.history_rounded,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _MiniStatusCard(
+            title: 'Theme',
+            value: controller.activeTheme.label,
+            icon: Icons.palette_outlined,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _MiniStatusCard(
+            title: 'Preview',
+            value: controller.livePreviewEnabled ? 'Live' : 'Manual',
+            icon: Icons.visibility_rounded,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniStatusCard extends StatelessWidget {
+  const _MiniStatusCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+  });
+
+  final String title;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: theme.colorScheme.primary),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.56),
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DisplayBadge extends StatelessWidget {
+  const _DisplayBadge({
+    required this.label,
+    required this.icon,
+  });
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.12),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: theme.colorScheme.primary),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _FunctionStrip extends StatelessWidget {
   const _FunctionStrip({required this.controller});
 
@@ -537,6 +716,138 @@ class _FunctionStrip extends StatelessWidget {
             onPressed: () => controller.insertFunction(function),
           );
         },
+      ),
+    );
+  }
+}
+
+class _VisualMathPanel extends StatefulWidget {
+  const _VisualMathPanel({required this.controller});
+
+  final CalculatorController controller;
+
+  @override
+  State<_VisualMathPanel> createState() => _VisualMathPanelState();
+}
+
+class _VisualMathPanelState extends State<_VisualMathPanel> {
+  late final TextEditingController _textController;
+
+  static const _samples = [
+    'y=x^2',
+    'y=sin(x)',
+    'y=x^3-2*x',
+    'y=sqrt(x+10)',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _textController = TextEditingController(text: widget.controller.expression);
+  }
+
+  @override
+  void didUpdateWidget(covariant _VisualMathPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_textController.text != widget.controller.expression) {
+      _textController.value = TextEditingValue(
+        text: widget.controller.expression,
+        selection: TextSelection.collapsed(
+          offset: widget.controller.expression.length,
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Equation Editor', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(
+            'Edit the function directly. Use x as the variable, or start with y=.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.68),
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _textController,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'y=x^2',
+              prefixIcon: const Icon(Icons.functions_rounded),
+              suffixIcon: IconButton(
+                onPressed: () {
+                  _textController.clear();
+                  widget.controller.useVisualSample('y=x^2');
+                },
+                icon: const Icon(Icons.restart_alt_rounded),
+                tooltip: 'Reset equation',
+              ),
+              filled: true,
+              fillColor: Colors.black.withValues(alpha: 0.14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            onChanged: widget.controller.updateVisualExpression,
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final sample in _samples)
+                ActionChip(
+                  label: Text(sample),
+                  onPressed: () => widget.controller.useVisualSample(sample),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final token in const ['x', '^2', '^3', 'sin(', 'cos(', 'tan(', 'sqrt(', 'log('])
+                ActionChip(
+                  label: Text(token),
+                  onPressed: () {
+                    final selection = _textController.selection;
+                    final current = _textController.text;
+                    final safeStart = selection.start < 0 ? current.length : selection.start;
+                    final safeEnd = selection.end < 0 ? current.length : selection.end;
+                    final updated =
+                        current.replaceRange(safeStart, safeEnd, token);
+                    _textController.value = TextEditingValue(
+                      text: updated,
+                      selection: TextSelection.collapsed(
+                        offset: safeStart + token.length,
+                      ),
+                    );
+                    widget.controller.updateVisualExpression(updated);
+                  },
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -893,6 +1204,93 @@ class _SettingSwitchTile extends StatelessWidget {
   }
 }
 
+class _ConfigActionTile extends StatelessWidget {
+  const _ConfigActionTile({
+    required this.title,
+    required this.subtitle,
+    required this.buttonLabel,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final String buttonLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: theme.textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.62),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(onPressed: onTap, child: Text(buttonLabel)),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _showTextConfigDialog(
+  BuildContext context, {
+  required String title,
+  required String initialValue,
+  required ValueChanged<String> onSave,
+  bool obscureText = false,
+}) async {
+  final controller = TextEditingController(text: initialValue);
+  await showDialog<void>(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          obscureText: obscureText,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              onSave(controller.text);
+              Navigator.of(context).pop();
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      );
+    },
+  );
+  controller.dispose();
+}
+
 class _CreditsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -909,7 +1307,7 @@ class _CreditsCard extends StatelessWidget {
           Text('Credits', style: theme.textTheme.titleMedium),
           const SizedBox(height: 10),
           Text(
-            'Built for AayanKarasu, 18yo developer, editor, designer, vibe coder, and ethical hacker.',
+            'Built by AayanKarasu, 18yo developer, editor, designer, vibe coder, and ethical hacker.',
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 8),
@@ -1037,9 +1435,11 @@ class _Keypad extends StatelessWidget {
                       label: key == '*' ? 'x' : key,
                       isAccent: ['/', '*', '-', '+', '='].contains(key),
                       onTap: () => _onKeyTap(key),
-                      onLongPress: ['/', '*', '-', '+', '%'].contains(key)
-                          ? () => controller.longPressFunction(key)
-                          : null,
+                      onLongPress: key == 'DEL'
+                          ? controller.clear
+                          : ['/', '*', '-', '+', '%'].contains(key)
+                              ? () => controller.longPressFunction(key)
+                              : null,
                     ),
                   ),
                 ),
