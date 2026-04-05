@@ -16,4 +16,30 @@ class HistoryEntry {
   final CalculatorMode mode;
   final DateTime timestamp;
   final String? note;
+
+  Map<String, Object?> toJson() {
+    return {
+      'query': query,
+      'expression': expression,
+      'result': result,
+      'mode': mode.name,
+      'timestamp': timestamp.toIso8601String(),
+      'note': note,
+    };
+  }
+
+  factory HistoryEntry.fromJson(Map<String, dynamic> json) {
+    return HistoryEntry(
+      query: json['query'] as String? ?? '',
+      expression: json['expression'] as String? ?? '',
+      result: json['result'] as String? ?? '',
+      mode: CalculatorMode.values.firstWhere(
+        (mode) => mode.name == json['mode'],
+        orElse: () => CalculatorMode.focus,
+      ),
+      timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
+          DateTime.now(),
+      note: json['note'] as String?,
+    );
+  }
 }

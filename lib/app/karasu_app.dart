@@ -12,30 +12,52 @@ class KarasuApp extends StatefulWidget {
 }
 
 class _KarasuAppState extends State<KarasuApp> {
-  late final CalculatorController controller;
+  late final Future<CalculatorController> _controllerFuture;
 
   @override
   void initState() {
     super.initState();
-    controller = CalculatorController()..seedDemoHistory();
-  }
-
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
+    _controllerFuture = CalculatorController.create();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        return MaterialApp(
-          debugShowCheckedModeBanner: false,
-          title: 'CalcAI',
-          theme: AppTheme.build(controller.activeTheme),
-          home: CalculatorScreen(controller: controller),
+    return FutureBuilder<CalculatorController>(
+      future: _controllerFuture,
+      builder: (context, snapshot) {
+        final controller = snapshot.data;
+        if (controller == null) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(
+              backgroundColor: const Color(0xFF090B11),
+              body: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Loading CalcAI...',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        return AnimatedBuilder(
+          animation: controller,
+          builder: (context, _) {
+            return MaterialApp(
+              debugShowCheckedModeBanner: false,
+              title: 'CalcAI',
+              theme: AppTheme.build(controller.activeTheme),
+              home: CalculatorScreen(controller: controller),
+            );
+          },
         );
       },
     );

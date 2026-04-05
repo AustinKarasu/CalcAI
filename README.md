@@ -1,17 +1,28 @@
-# calculator
+# CalcAI
 
-A new Flutter project.
+CalcAI is a Flutter-based Android calculator built for public release.
 
-## Getting Started
+## What It Includes
 
-This project is a starting point for a Flutter application.
+- Standard arithmetic calculator
+- Scientific mode
+- Programmer mode
+- Financial mode
+- Smart AI query parsing for natural-language calculations
+- Local history intelligence and suggestion shortcuts
+- Visual math graphing
+- Offline-first behavior with locally persisted state
 
-A few resources to get you started if this is your first Flutter project:
+## Release Notes
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+- No backend is required for the current feature set
+- History, theme, mode, and last calculation state are stored on-device
+- Android package id: `com.austinkarasu.calcai`
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Local Commands
+
+```bash
+flutter analyze
+flutter test
+flutter build apk --release --no-pub
+```

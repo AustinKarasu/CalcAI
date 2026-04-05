@@ -83,6 +83,26 @@ class SmartQueryService {
       );
     }
 
+    final percentMatch =
+        RegExp(r'what is (\d+(\.\d+)?)% of (\d+(\.\d+)?)').firstMatch(normalized);
+    if (percentMatch != null) {
+      final percent = double.parse(percentMatch.group(1)!);
+      final amount = double.parse(percentMatch.group(3)!);
+      final value = amount * percent / 100;
+      return CalculationIntent(
+        result: CalculationResult(
+          input: query,
+          expression: '($percent / 100) * $amount',
+          result: value.toStringAsFixed(2),
+          steps: [
+            'Convert percent to decimal = ${(percent / 100).toStringAsFixed(4)}',
+            'Multiply by base amount = ${value.toStringAsFixed(2)}',
+          ],
+        ),
+        suggestedMode: CalculatorMode.focus,
+      );
+    }
+
     final visualMatch = RegExp(r'^(y\s*=.+|graph\s+.+)$').firstMatch(normalized);
     if (visualMatch != null) {
       final expression = normalized.startsWith('graph ')
@@ -95,6 +115,8 @@ class SmartQueryService {
     }
 
     final arithmetic = normalized
+        .replaceAll('what is ', '')
+        .replaceAll('calculate ', '')
         .replaceAll('multiplied by', '*')
         .replaceAll('divided by', '/')
         .replaceAll('times', '*')

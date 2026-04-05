@@ -1,4 +1,4 @@
-package com.example.calculator
+package com.austinkarasu.calcai
 
 import io.flutter.embedding.android.FlutterActivity
 

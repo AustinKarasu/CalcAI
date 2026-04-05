@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/calculation_result.dart';
 import '../models/calculator_mode.dart';
 import '../models/history_entry.dart';
 import '../models/smart_suggestion.dart';
+import '../services/app_storage.dart';
 import '../services/calculation_engine.dart';
 import '../services/conversion_service.dart';
 import '../services/history_intelligence_service.dart';
@@ -11,15 +14,31 @@ import '../services/smart_query_service.dart';
 import '../services/voice_service.dart';
 
 class CalculatorController extends ChangeNotifier {
-  CalculatorController()
-      : _engine = CalculationEngine(),
-        _historyService = HistoryIntelligenceService(),
-        _voiceService = VoiceService() {
+  CalculatorController._({
+    required AppStorage storage,
+    required CalculationEngine engine,
+    required HistoryIntelligenceService historyService,
+    required VoiceService voiceService,
+  })  : _storage = storage,
+        _engine = engine,
+        _historyService = historyService,
+        _voiceService = voiceService {
     _smartQueryService = SmartQueryService(_engine, ConversionService());
-    _queryController.text = smartPrompt;
+  }
+
+  static Future<CalculatorController> create() async {
+    final controller = CalculatorController._(
+      storage: AppStorage(),
+      engine: CalculationEngine(),
+      historyService: HistoryIntelligenceService(),
+      voiceService: VoiceService(),
+    );
+    await controller._initialize();
+    return controller;
   }
 
   final TextEditingController _queryController = TextEditingController();
+  final AppStorage _storage;
   final CalculationEngine _engine;
   final HistoryIntelligenceService _historyService;
   final VoiceService _voiceService;
@@ -40,31 +59,28 @@ class CalculatorController extends ChangeNotifier {
 
   TextEditingController get queryController => _queryController;
 
-  void seedDemoHistory() {
-    history = [
-      HistoryEntry(
-        query: 'split \$150 among 4 people with 10% tip',
-        expression: '(150 + 15) / 4',
-        result: '41.25',
-        mode: CalculatorMode.focus,
-        timestamp: DateTime.now().subtract(const Duration(minutes: 22)),
-      ),
-      HistoryEntry(
-        query: '5 km to miles',
-        expression: '5 km -> miles',
-        result: '3.1069',
-        mode: CalculatorMode.focus,
-        timestamp: DateTime.now().subtract(const Duration(hours: 3)),
-      ),
-      HistoryEntry(
-        query: 'emi for \$250000 at 8.5% for 240 months',
-        expression: 'emi(250000,8.5,240)',
-        result: '2169.42',
-        mode: CalculatorMode.financial,
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-    ];
+  Future<void> _initialize() async {
+    final persisted = await _storage.load();
+    if (persisted != null) {
+      expression = persisted.expression;
+      result = persisted.result;
+      smartPrompt = persisted.smartPrompt;
+      insight = persisted.insight.isEmpty
+          ? 'History intelligence learns repeated patterns locally.'
+          : persisted.insight;
+      steps = persisted.steps.isEmpty ? const ['Tap = to evaluate.'] : persisted.steps;
+      mode = persisted.mode;
+      activeTheme = persisted.theme;
+      history = persisted.history;
+    } else {
+      _seedDemoHistory();
+    }
+
+    _queryController.text = smartPrompt;
     suggestions = _historyService.buildSuggestions(history);
+    if (mode == CalculatorMode.visual) {
+      graphPoints = _engine.buildGraphPoints(expression);
+    }
   }
 
   void setBottomTab(int index) {
@@ -80,33 +96,36 @@ class CalculatorController extends ChangeNotifier {
       result = '${graphPoints.length} plot points';
       steps = const [
         'Visual Math Mode graphs the equation in real time.',
-        'Try y=sin(x) or y=x^3-2*x.',
+        'Try y=sin(x), y=x^3-2*x, or graph x*x+3.',
       ];
     } else if (expression == 'y=x^2') {
       expression = '0';
       result = '0';
       steps = const ['Ready for the next calculation.'];
+    } else {
+      _evaluateCurrent();
     }
-    notifyListeners();
+    _persistAndNotify();
   }
 
   void setTheme(AppThemeMode next) {
     activeTheme = next;
-    notifyListeners();
+    _persistAndNotify();
   }
 
   void appendToken(String token) {
     final shouldReplace = expression == '0' || expression == 'Error';
-    if (shouldReplace && !_isOperator(token)) {
+    if (shouldReplace && !_isBinaryOperator(token)) {
       expression = token;
     } else if (token == '.' && _currentNumberSegment().contains('.')) {
       return;
-    } else if (_isOperator(token)) {
+    } else if (_isBinaryOperator(token)) {
       expression = _appendOperator(token);
     } else {
       expression += token;
     }
     _evaluateCurrent();
+    _persistAndNotify();
   }
 
   void backspace() {
@@ -118,13 +137,14 @@ class CalculatorController extends ChangeNotifier {
       expression = '0';
     }
     _evaluateCurrent();
+    _persistAndNotify();
   }
 
   void clear() {
     expression = '0';
     result = '0';
     steps = const ['Ready for the next calculation.'];
-    notifyListeners();
+    _persistAndNotify();
   }
 
   void evaluateExpression() {
@@ -143,8 +163,8 @@ class CalculatorController extends ChangeNotifier {
     }
     final intent = _smartQueryService.parse(query, mode);
     mode = intent.suggestedMode;
-    _queryController.text = query;
     smartPrompt = query;
+    _queryController.text = query;
     _applyCalculation(
       intent.result,
       originalQuery: query,
@@ -153,7 +173,6 @@ class CalculatorController extends ChangeNotifier {
   }
 
   void useSuggestion(SmartSuggestion suggestion) {
-    _queryController.text = suggestion.prefill;
     runSmartQuery(suggestion.prefill);
   }
 
@@ -166,6 +185,7 @@ class CalculatorController extends ChangeNotifier {
       expression = '-$expression';
     }
     _evaluateCurrent();
+    _persistAndNotify();
   }
 
   void longPressFunction(String token) {
@@ -209,22 +229,21 @@ class CalculatorController extends ChangeNotifier {
   }
 
   String formattedExpression() {
-    return expression.replaceAll('*', '×').replaceAll('/', '÷');
+    return expression.replaceAll('*', 'x').replaceAll('/', '/');
   }
 
   void _evaluateCurrent() {
     if (mode == CalculatorMode.visual) {
       graphPoints = _engine.buildGraphPoints(expression);
-      result = graphPoints.isEmpty ? 'No graph' : '${graphPoints.length} plot points';
+      result =
+          graphPoints.isEmpty ? 'No graph' : '${graphPoints.length} plot points';
       steps = const ['Graph refreshed.'];
-      notifyListeners();
       return;
     }
 
     final calculation = _engine.evaluate(expression, mode);
     result = calculation.result;
     steps = calculation.steps;
-    notifyListeners();
   }
 
   void _applyCalculation(
@@ -251,12 +270,12 @@ class CalculatorController extends ChangeNotifier {
         note: calculation.note,
       ),
       ...history,
-    ].take(12).toList();
+    ].take(20).toList();
     suggestions = _historyService.buildSuggestions(history);
-    notifyListeners();
+    _persistAndNotify();
   }
 
-  bool _isOperator(String token) {
+  bool _isBinaryOperator(String token) {
     return token == '+' || token == '-' || token == '*' || token == '/';
   }
 
@@ -267,7 +286,7 @@ class CalculatorController extends ChangeNotifier {
     }
 
     final lastChar = trimmed.substring(trimmed.length - 1);
-    if (_isOperator(lastChar)) {
+    if (_isBinaryOperator(lastChar)) {
       return '${trimmed.substring(0, trimmed.length - 1)}$token ';
     }
     return '$trimmed $token ';
@@ -276,6 +295,51 @@ class CalculatorController extends ChangeNotifier {
   String _currentNumberSegment() {
     final segments = expression.split(RegExp(r'[+\-*/()]'));
     return segments.isEmpty ? '' : segments.last.trim();
+  }
+
+  void _seedDemoHistory() {
+    history = [
+      HistoryEntry(
+        query: 'split \$150 among 4 people with 10% tip',
+        expression: '(150 + 15) / 4',
+        result: '41.25',
+        mode: CalculatorMode.focus,
+        timestamp: DateTime.now().subtract(const Duration(minutes: 22)),
+      ),
+      HistoryEntry(
+        query: '5 km to miles',
+        expression: '5 km -> miles',
+        result: '3.1069',
+        mode: CalculatorMode.focus,
+        timestamp: DateTime.now().subtract(const Duration(hours: 3)),
+      ),
+      HistoryEntry(
+        query: 'emi for \$250000 at 8.5% for 240 months',
+        expression: 'emi(250000,8.5,240)',
+        result: '2169.42',
+        mode: CalculatorMode.financial,
+        timestamp: DateTime.now().subtract(const Duration(days: 1)),
+      ),
+    ];
+    suggestions = _historyService.buildSuggestions(history);
+  }
+
+  void _persistAndNotify() {
+    unawaited(
+      _storage.save(
+        PersistedAppState(
+          expression: expression,
+          result: result,
+          smartPrompt: smartPrompt,
+          insight: insight,
+          steps: steps,
+          mode: mode,
+          theme: activeTheme,
+          history: history,
+        ),
+      ),
+    );
+    notifyListeners();
   }
 
   @override

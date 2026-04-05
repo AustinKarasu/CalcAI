@@ -19,3 +19,21 @@ enum AppThemeMode {
 
   final String label;
 }
+
+extension CalculatorModeX on CalculatorMode {
+  static CalculatorMode fromName(String? name) {
+    return CalculatorMode.values.firstWhere(
+      (mode) => mode.name == name,
+      orElse: () => CalculatorMode.focus,
+    );
+  }
+}
+
+extension AppThemeModeX on AppThemeMode {
+  static AppThemeMode fromName(String? name) {
+    return AppThemeMode.values.firstWhere(
+      (mode) => mode.name == name,
+      orElse: () => AppThemeMode.neon,
+    );
+  }
+}

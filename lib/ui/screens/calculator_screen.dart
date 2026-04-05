@@ -91,7 +91,7 @@ class _CalculatorPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _Header(title: 'CALCAI'),
+          const _Header(title: 'Calculator', badge: 'CalcAI'),
           const SizedBox(height: 22),
           _DisplayCard(controller: controller),
           const SizedBox(height: 16),
@@ -135,7 +135,7 @@ class _AiPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       children: [
-        const _Header(title: 'SMART AI'),
+        const _Header(title: 'Smart AI', badge: 'CalcAI'),
         const SizedBox(height: 22),
         _SmartPromptCard(controller: controller),
         const SizedBox(height: 16),
@@ -190,7 +190,7 @@ class _HistoryPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${entry.mode.label} • ${entry.timestamp.hour.toString().padLeft(2, '0')}:${entry.timestamp.minute.toString().padLeft(2, '0')}',
+                  '${entry.mode.label} - ${entry.timestamp.hour.toString().padLeft(2, '0')}:${entry.timestamp.minute.toString().padLeft(2, '0')}',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: Colors.white.withValues(alpha: 0.55),
                   ),
@@ -217,7 +217,7 @@ class _SettingsPage extends StatelessWidget {
         Text('Settings', style: theme.textTheme.headlineSmall),
         const SizedBox(height: 12),
         Text(
-          'Theme, accessibility, and offline behavior for the calculator.',
+          'Theme, accessibility, offline behavior, and release-readiness settings.',
           style: theme.textTheme.bodyMedium?.copyWith(
             color: Colors.white.withValues(alpha: 0.62),
           ),
@@ -237,10 +237,10 @@ class _SettingsPage extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         _InfoCard(
-          title: 'Offline-first',
+          title: 'Release posture',
           value:
-              'Arithmetic, finance presets, smart parsing, history patterns, and graphing run on-device.',
-          icon: Icons.offline_bolt_rounded,
+              'No backend is required for the current feature set, which lowers failure risk for an early public launch.',
+          icon: Icons.shield_rounded,
           accent: theme.colorScheme.primary,
         ),
         const SizedBox(height: 12),
@@ -256,9 +256,13 @@ class _SettingsPage extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.title});
+  const _Header({
+    required this.title,
+    required this.badge,
+  });
 
   final String title;
+  final String badge;
 
   @override
   Widget build(BuildContext context) {
@@ -266,15 +270,25 @@ class _Header extends StatelessWidget {
     return Row(
       children: [
         Icon(Icons.grid_view_rounded, color: theme.colorScheme.primary),
-        const Spacer(),
-        Text(
-          title,
-          style: theme.textTheme.titleMedium?.copyWith(
-            color: theme.colorScheme.primary,
-            letterSpacing: 1.6,
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: theme.textTheme.headlineSmall?.copyWith(fontSize: 24),
+              ),
+              Text(
+                badge,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
           ),
         ),
-        const Spacer(),
         Icon(Icons.tune_rounded, color: theme.colorScheme.primary),
       ],
     );
@@ -397,7 +411,7 @@ class _SmartPromptCard extends StatelessWidget {
                   ),
                   filled: true,
                   fillColor: Colors.black.withValues(alpha: 0.14),
-                  prefixIcon: const Icon(Icons.mic_none_rounded),
+                  prefixIcon: const Icon(Icons.auto_fix_high_rounded),
                   suffixIcon: IconButton(
                     onPressed: controller.runSmartQuery,
                     icon: const Icon(Icons.arrow_forward_rounded),
@@ -449,7 +463,7 @@ class _SuggestionChip extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       onTap: onTap,
       child: Container(
-        width: 178,
+        width: 190,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.18),
@@ -457,8 +471,6 @@ class _SuggestionChip extends StatelessWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               suggestion.title,
@@ -495,7 +507,7 @@ class _InsightCards extends StatelessWidget {
       children: [
         Expanded(
           child: _InfoCard(
-            title: 'History Intelligence',
+            title: 'History insight',
             value: controller.insight,
             icon: Icons.psychology_alt_rounded,
             accent: theme.colorScheme.secondary,
@@ -504,7 +516,7 @@ class _InsightCards extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: _InfoCard(
-            title: 'Current Result',
+            title: 'Current result',
             value: controller.result,
             icon: Icons.bolt_rounded,
             accent: theme.colorScheme.primary,
@@ -587,7 +599,7 @@ class _InfoCard extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.66),
               fontSize: 12,
             ),
-            maxLines: 4,
+            maxLines: 5,
             overflow: TextOverflow.ellipsis,
           ),
         ],
@@ -621,7 +633,7 @@ class _Keypad extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.all(6),
                     child: KeypadButton(
-                      label: key == '*' ? '×' : key == '/' ? '÷' : key,
+                      label: key == '*' ? 'x' : key,
                       isAccent: ['/', '*', '-', '+', '='].contains(key),
                       onTap: () => _onKeyTap(key),
                       onLongPress: ['/', '*', '-', '+', '%'].contains(key)
