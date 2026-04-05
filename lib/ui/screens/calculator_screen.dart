@@ -39,9 +39,10 @@ class CalculatorScreen extends StatelessWidget {
                 child: IndexedStack(
                   index: controller.bottomTab,
                   children: [
-                    _HomeTab(controller: controller),
-                    _HistoryTab(controller: controller),
-                    _SettingsTab(controller: controller),
+                    _CalculatorPage(controller: controller),
+                    _AiPage(controller: controller),
+                    _HistoryPage(controller: controller),
+                    _SettingsPage(controller: controller),
                   ],
                 ),
               ),
@@ -54,7 +55,11 @@ class CalculatorScreen extends StatelessWidget {
                 destinations: const [
                   NavigationDestination(
                     icon: Icon(Icons.calculate_rounded),
-                    label: 'Home',
+                    label: 'Calculator',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.auto_awesome_rounded),
+                    label: 'AI',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.history_rounded),
@@ -74,8 +79,8 @@ class CalculatorScreen extends StatelessWidget {
   }
 }
 
-class _HomeTab extends StatelessWidget {
-  const _HomeTab({required this.controller});
+class _CalculatorPage extends StatelessWidget {
+  const _CalculatorPage({required this.controller});
 
   final CalculatorController controller;
 
@@ -86,14 +91,12 @@ class _HomeTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Header(),
-          const SizedBox(height: 24),
+          const _Header(title: 'CALCAI'),
+          const SizedBox(height: 22),
           _DisplayCard(controller: controller),
           const SizedBox(height: 16),
-          _SmartPromptCard(controller: controller),
-          const SizedBox(height: 16),
           SizedBox(
-            height: 38,
+            height: 40,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: CalculatorMode.values.length,
@@ -109,8 +112,6 @@ class _HomeTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          _InsightCards(controller: controller),
-          const SizedBox(height: 16),
           if (controller.mode == CalculatorMode.visual)
             GraphCard(
               points: controller.graphPoints,
@@ -124,23 +125,157 @@ class _HomeTab extends StatelessWidget {
   }
 }
 
+class _AiPage extends StatelessWidget {
+  const _AiPage({required this.controller});
+
+  final CalculatorController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      children: [
+        const _Header(title: 'SMART AI'),
+        const SizedBox(height: 22),
+        _SmartPromptCard(controller: controller),
+        const SizedBox(height: 16),
+        _InsightCards(controller: controller),
+        const SizedBox(height: 16),
+        _StepsCard(controller: controller),
+      ],
+    );
+  }
+}
+
+class _HistoryPage extends StatelessWidget {
+  const _HistoryPage({required this.controller});
+
+  final CalculatorController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Recent History', style: theme.textTheme.headlineSmall),
+        const SizedBox(height: 8),
+        Text(
+          'Stored locally and used to suggest recurring calculations.',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: Colors.white.withValues(alpha: 0.62),
+          ),
+        ),
+        const SizedBox(height: 16),
+        for (final entry in controller.history)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface.withValues(alpha: 0.82),
+              borderRadius: BorderRadius.circular(22),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(entry.query, style: theme.textTheme.titleMedium),
+                const SizedBox(height: 6),
+                Text(
+                  '${entry.expression} = ${entry.result}',
+                  style: TextStyle(
+                    color: theme.colorScheme.primary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${entry.mode.label} • ${entry.timestamp.hour.toString().padLeft(2, '0')}:${entry.timestamp.minute.toString().padLeft(2, '0')}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.55),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _SettingsPage extends StatelessWidget {
+  const _SettingsPage({required this.controller});
+
+  final CalculatorController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Settings', style: theme.textTheme.headlineSmall),
+        const SizedBox(height: 12),
+        Text(
+          'Theme, accessibility, and offline behavior for the calculator.',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: Colors.white.withValues(alpha: 0.62),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final appTheme in AppThemeMode.values)
+              ChoiceChip(
+                label: Text(appTheme.label),
+                selected: controller.activeTheme == appTheme,
+                onSelected: (_) => controller.setTheme(appTheme),
+              ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        _InfoCard(
+          title: 'Offline-first',
+          value:
+              'Arithmetic, finance presets, smart parsing, history patterns, and graphing run on-device.',
+          icon: Icons.offline_bolt_rounded,
+          accent: theme.colorScheme.primary,
+        ),
+        const SizedBox(height: 12),
+        _InfoCard(
+          title: 'Accessibility',
+          value: controller.accessibilitySummary(),
+          icon: Icons.record_voice_over_rounded,
+          accent: theme.colorScheme.secondary,
+        ),
+      ],
+    );
+  }
+}
+
 class _Header extends StatelessWidget {
+  const _Header({required this.title});
+
+  final String title;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Row(
       children: [
-        Icon(Icons.menu_rounded, color: theme.colorScheme.primary),
+        Icon(Icons.grid_view_rounded, color: theme.colorScheme.primary),
         const Spacer(),
         Text(
-          'KARASU CALCULATOR',
+          title,
           style: theme.textTheme.titleMedium?.copyWith(
             color: theme.colorScheme.primary,
             letterSpacing: 1.6,
           ),
         ),
         const Spacer(),
-        Icon(Icons.auto_awesome_rounded, color: theme.colorScheme.primary),
+        Icon(Icons.tune_rounded, color: theme.colorScheme.primary),
       ],
     );
   }
@@ -188,7 +323,7 @@ class _DisplayCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              controller.expression,
+              controller.formattedExpression(),
               style: theme.textTheme.titleMedium?.copyWith(
                 color: Colors.white.withValues(alpha: 0.55),
               ),
@@ -256,7 +391,7 @@ class _SmartPromptCard extends StatelessWidget {
                 controller: controller.queryController,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
-                  hintText: 'Split \$120 among 3 people with 10% tip',
+                  hintText: 'split \$120 among 3 people with 10% tip',
                   hintStyle: TextStyle(
                     color: Colors.white.withValues(alpha: 0.4),
                   ),
@@ -338,7 +473,7 @@ class _SuggestionChip extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.6),
                 fontSize: 12,
               ),
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ],
@@ -369,13 +504,47 @@ class _InsightCards extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: _InfoCard(
-            title: 'Accessibility',
-            value: controller.accessibilitySummary(),
-            icon: Icons.record_voice_over_rounded,
+            title: 'Current Result',
+            value: controller.result,
+            icon: Icons.bolt_rounded,
             accent: theme.colorScheme.primary,
           ),
         ),
       ],
+    );
+  }
+}
+
+class _StepsCard extends StatelessWidget {
+  const _StepsCard({required this.controller});
+
+  final CalculatorController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Steps', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 10),
+          for (final step in controller.steps) ...[
+            Text(
+              step,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.white.withValues(alpha: 0.72),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -436,11 +605,11 @@ class _Keypad extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     const rows = [
-      ['C', '⌫', '%', '÷'],
-      ['7', '8', '9', '×'],
+      ['C', 'DEL', '%', '/'],
+      ['7', '8', '9', '*'],
       ['4', '5', '6', '-'],
       ['1', '2', '3', '+'],
-      ['0', '.', '±', '='],
+      ['0', '.', '+/-', '='],
     ];
     return Column(
       children: [
@@ -452,10 +621,10 @@ class _Keypad extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.all(6),
                     child: KeypadButton(
-                      label: key,
-                      isAccent: ['÷', '×', '-', '+', '='].contains(key),
+                      label: key == '*' ? '×' : key == '/' ? '÷' : key,
+                      isAccent: ['/', '*', '-', '+', '='].contains(key),
                       onTap: () => _onKeyTap(key),
-                      onLongPress: ['÷', '×', '-', '+', '%'].contains(key)
+                      onLongPress: ['/', '*', '-', '+', '%'].contains(key)
                           ? () => controller.longPressFunction(key)
                           : null,
                     ),
@@ -465,7 +634,7 @@ class _Keypad extends StatelessWidget {
           ),
         const SizedBox(height: 8),
         Text(
-          'Long press operators for scientific shortcuts. Swipe the display left to delete.',
+          'Long press operators for scientific shortcuts. Swipe left to delete.',
           style: theme.textTheme.bodyMedium?.copyWith(
             color: Colors.white.withValues(alpha: 0.56),
           ),
@@ -479,127 +648,18 @@ class _Keypad extends StatelessWidget {
       case 'C':
         controller.clear();
         return;
-      case '⌫':
+      case 'DEL':
         controller.backspace();
         return;
       case '=':
         controller.evaluateExpression();
         return;
-      case '±':
+      case '+/-':
         controller.toggleSign();
         return;
       default:
         controller.appendToken(key);
         return;
     }
-  }
-}
-
-class _HistoryTab extends StatelessWidget {
-  const _HistoryTab({required this.controller});
-
-  final CalculatorController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text('Recent History', style: theme.textTheme.headlineSmall),
-        const SizedBox(height: 8),
-        Text(
-          'Stored locally and used to suggest recurring calculations.',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: Colors.white.withValues(alpha: 0.62),
-          ),
-        ),
-        const SizedBox(height: 16),
-        for (final entry in controller.history)
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface.withValues(alpha: 0.82),
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(entry.query, style: theme.textTheme.titleMedium),
-                const SizedBox(height: 6),
-                Text(
-                  '${entry.expression} = ${entry.result}',
-                  style: TextStyle(
-                    color: theme.colorScheme.primary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${entry.mode.label} • ${entry.timestamp.hour.toString().padLeft(2, '0')}:${entry.timestamp.minute.toString().padLeft(2, '0')}',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.55),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _SettingsTab extends StatelessWidget {
-  const _SettingsTab({required this.controller});
-
-  final CalculatorController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text('Personalization', style: theme.textTheme.headlineSmall),
-        const SizedBox(height: 12),
-        Text(
-          'Adaptive layout, themes, and accessibility hooks designed for an intelligent mobile calculator.',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: Colors.white.withValues(alpha: 0.62),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            for (final appTheme in AppThemeMode.values)
-              ChoiceChip(
-                label: Text(appTheme.label),
-                selected: controller.activeTheme == appTheme,
-                onSelected: (_) => controller.setTheme(appTheme),
-              ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        _InfoCard(
-          title: 'Offline-first',
-          value:
-              'Core arithmetic, financial presets, smart parsing, history patterns, and graphing all run on-device.',
-          icon: Icons.offline_bolt_rounded,
-          accent: theme.colorScheme.primary,
-        ),
-        const SizedBox(height: 12),
-        _InfoCard(
-          title: 'Adaptive UI',
-          value:
-              'The home view prioritizes Focus Mode, while advanced modes expose extra intelligence without leaving the main workspace.',
-          icon: Icons.tune_rounded,
-          accent: theme.colorScheme.secondary,
-        ),
-      ],
-    );
   }
 }

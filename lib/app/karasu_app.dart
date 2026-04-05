@@ -33,7 +33,7 @@ class _KarasuAppState extends State<KarasuApp> {
       builder: (context, _) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          title: 'Karasu Calculator',
+          title: 'CalcAI',
           theme: AppTheme.build(controller.activeTheme),
           home: CalculatorScreen(controller: controller),
         );

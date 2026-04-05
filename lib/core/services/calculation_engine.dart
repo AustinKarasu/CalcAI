@@ -35,29 +35,29 @@ class CalculationEngine {
   }
 
   CalculationResult _evaluateArithmetic(String expression) {
-    final steps = _buildArithmeticSteps(expression);
     final value = _safeEval(expression);
     if (value == null) {
-      return const CalculationResult(
-        input: 'Error',
-        expression: 'Error',
+      return CalculationResult(
+        input: expression,
+        expression: expression,
         result: 'Error',
-        steps: ['Unable to parse expression.'],
+        steps: const ['Invalid expression.'],
       );
     }
+
     return CalculationResult(
       input: expression,
       expression: expression,
       result: _format(value),
-      steps: steps,
+      steps: _buildSteps(expression, value),
     );
   }
 
   CalculationResult _evaluateProgrammer(String expression) {
-    final lower = expression.toLowerCase();
-    final bitwiseMatch =
-        RegExp(r'^(0b[01]+|0x[a-f0-9]+|\d+)\s*([&|^]|<<|>>)\s*(0b[01]+|0x[a-f0-9]+|\d+)$')
-            .firstMatch(lower);
+    final compact = expression.toLowerCase().replaceAll(' ', '');
+    final bitwiseMatch = RegExp(
+      r'^(0b[01]+|0x[a-f0-9]+|\d+)(<<|>>|&|\||\^)(0b[01]+|0x[a-f0-9]+|\d+)$',
+    ).firstMatch(compact);
     if (bitwiseMatch != null) {
       final left = _parseInt(bitwiseMatch.group(1)!);
       final operator = bitwiseMatch.group(2)!;
@@ -70,6 +70,7 @@ class CalculationEngine {
         '>>' => left >> right,
         _ => 0,
       };
+
       return CalculationResult(
         input: expression,
         expression: '$left $operator $right',
@@ -82,7 +83,7 @@ class CalculationEngine {
       );
     }
 
-    final value = _parseInt(lower);
+    final value = _parseInt(compact);
     return CalculationResult(
       input: expression,
       expression: '$value',
@@ -96,23 +97,22 @@ class CalculationEngine {
   }
 
   CalculationResult _evaluateFinancial(String expression) {
-    final emiMatch =
-        RegExp(r'emi\(([\d.]+),([\d.]+),([\d.]+)\)').firstMatch(expression);
+    final compact = expression.replaceAll(' ', '');
+
+    final emiMatch = RegExp(r'emi\(([\d.]+),([\d.]+),([\d.]+)\)').firstMatch(compact);
     if (emiMatch != null) {
       final principal = double.parse(emiMatch.group(1)!);
       final annualRate = double.parse(emiMatch.group(2)!);
       final months = double.parse(emiMatch.group(3)!);
       final monthlyRate = annualRate / 12 / 100;
-      final numerator =
-          principal * monthlyRate * math.pow(1 + monthlyRate, months);
-      final denominator = math.pow(1 + monthlyRate, months) - 1;
-      final emi = numerator / denominator;
+      final factor = math.pow(1 + monthlyRate, months).toDouble();
+      final emi = principal * monthlyRate * factor / (factor - 1);
       return CalculationResult(
         input: expression,
-        expression: 'EMI($principal, $annualRate%, $months months)',
+        expression: 'emi($principal,$annualRate,$months)',
         result: _format(emi),
         steps: [
-          'Monthly rate = ${_format(monthlyRate * 100)}%',
+          'Monthly interest = ${_format(monthlyRate * 100)}%',
           'Monthly payment = ${_format(emi)}',
           'Total payout = ${_format(emi * months)}',
         ],
@@ -120,7 +120,7 @@ class CalculationEngine {
     }
 
     final interestMatch =
-        RegExp(r'interest\(([\d.]+),([\d.]+),([\d.]+)\)').firstMatch(expression);
+        RegExp(r'interest\(([\d.]+),([\d.]+),([\d.]+)\)').firstMatch(compact);
     if (interestMatch != null) {
       final principal = double.parse(interestMatch.group(1)!);
       final rate = double.parse(interestMatch.group(2)!);
@@ -128,24 +128,24 @@ class CalculationEngine {
       final interest = principal * rate * years / 100;
       return CalculationResult(
         input: expression,
-        expression: 'Interest($principal, $rate%, $years years)',
+        expression: 'interest($principal,$rate,$years)',
         result: _format(interest),
         steps: [
-          'Simple interest = P x R x T / 100',
+          'Simple interest = principal x rate x time / 100',
           'Interest = ${_format(interest)}',
           'Total amount = ${_format(principal + interest)}',
         ],
       );
     }
 
-    final taxMatch = RegExp(r'tax\(([\d.]+),([\d.]+)\)').firstMatch(expression);
+    final taxMatch = RegExp(r'tax\(([\d.]+),([\d.]+)\)').firstMatch(compact);
     if (taxMatch != null) {
       final amount = double.parse(taxMatch.group(1)!);
       final rate = double.parse(taxMatch.group(2)!);
       final tax = amount * rate / 100;
       return CalculationResult(
         input: expression,
-        expression: 'Tax($amount, $rate%)',
+        expression: 'tax($amount,$rate)',
         result: _format(amount + tax),
         steps: [
           'Tax amount = ${_format(tax)}',
@@ -164,21 +164,23 @@ class CalculationEngine {
         input: 'visual',
         expression: 'visual',
         result: 'No graph',
-        steps: ['Use expressions such as y=x^2 or y=sin(x).'],
+        steps: ['Use forms like y=x^2 or y=sin(x).'],
       );
     }
+
     final sample = points.firstWhere(
       (point) => point.x >= 0,
       orElse: () => points.first,
     );
+
     return CalculationResult(
       input: expression,
       expression: expression,
       result: '${points.length} plot points',
       steps: [
         'Graph generated in real time.',
-        'Use x in the expression to visualize a curve.',
-        'Sample at x=${_format(sample.x)} gives y=${_format(sample.y)}',
+        'Use x as the variable.',
+        'At x=${_format(sample.x)}, y=${_format(sample.y)}',
       ],
     );
   }
@@ -193,29 +195,10 @@ class CalculationEngine {
         .replaceAll('^', '**');
   }
 
-  List<String> _buildArithmeticSteps(String expression) {
-    final match =
-        RegExp(r'^(-?\d+(\.\d+)?)\s*([+\-*/])\s*(-?\d+(\.\d+)?)$').firstMatch(
-      expression.replaceAll(' ', ''),
-    );
-    if (match == null) {
-      return ['Expression normalized to $expression'];
-    }
-
-    final left = double.parse(match.group(1)!);
-    final operator = match.group(3)!;
-    final right = double.parse(match.group(4)!);
-    final value = switch (operator) {
-      '+' => left + right,
-      '-' => left - right,
-      '*' => left * right,
-      '/' => right == 0 ? double.nan : left / right,
-      _ => double.nan,
-    };
-
+  List<String> _buildSteps(String expression, double value) {
     return [
-      'Read operands: ${_format(left)} and ${_format(right)}',
-      'Apply operator $operator',
+      'Expression: $expression',
+      'Computed locally on-device.',
       'Result = ${_format(value)}',
     ];
   }
@@ -246,7 +229,7 @@ class CalculationEngine {
       return value.toInt().toString();
     }
     return value
-        .toStringAsFixed(4)
+        .toStringAsFixed(6)
         .replaceFirst(RegExp(r'0+$'), '')
         .replaceFirst(RegExp(r'\.$'), '');
   }
@@ -306,36 +289,47 @@ class _ExpressionParser {
   }
 
   double _parsePower() {
-    var value = _parseFactor();
+    var value = _parseUnary();
     while (true) {
       _skipWhitespace();
       if (_match('**')) {
-        value = math.pow(value, _parseFactor()).toDouble();
+        value = math.pow(value, _parseUnary()).toDouble();
       } else {
         return value;
       }
     }
   }
 
-  double _parseFactor() {
+  double _parseUnary() {
     _skipWhitespace();
     if (_match('+')) {
-      return _parseFactor();
+      return _parseUnary();
     }
     if (_match('-')) {
-      return -_parseFactor();
+      return -_parseUnary();
     }
+    return _parsePrimary();
+  }
+
+  double _parsePrimary() {
+    _skipWhitespace();
     if (_match('(')) {
       final value = _parseExpression();
-      _match(')');
+      if (!_match(')')) {
+        throw const FormatException('Missing )');
+      }
       return value;
     }
 
     final identifier = _parseIdentifier();
     if (identifier != null) {
-      _match('(');
+      if (!_match('(')) {
+        throw const FormatException('Missing (');
+      }
       final inner = _parseExpression();
-      _match(')');
+      if (!_match(')')) {
+        throw const FormatException('Missing )');
+      }
       return switch (identifier) {
         'sin' => math.sin(inner),
         'cos' => math.cos(inner),
@@ -366,9 +360,19 @@ class _ExpressionParser {
   double _parseNumber() {
     _skipWhitespace();
     final start = _index;
-    while (_index < source.length &&
-        RegExp(r'[\d.]').hasMatch(source[_index])) {
-      _index++;
+    var hasDot = false;
+    while (_index < source.length) {
+      final char = source[_index];
+      if (RegExp(r'\d').hasMatch(char)) {
+        _index++;
+        continue;
+      }
+      if (char == '.' && !hasDot) {
+        hasDot = true;
+        _index++;
+        continue;
+      }
+      break;
     }
     if (start == _index) {
       throw const FormatException('Expected number');

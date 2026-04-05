@@ -28,14 +28,12 @@ class CalculatorController extends ChangeNotifier {
   CalculatorMode mode = CalculatorMode.focus;
   AppThemeMode activeTheme = AppThemeMode.neon;
   int bottomTab = 0;
-  String expression = '150 ÷ 4';
+  String expression = '150 / 4';
   String result = '37.5';
-  String smartPrompt = 'Split \$150 among 4 people...';
+  String smartPrompt = 'split \$150 among 4 people with 10% tip';
   String insight = 'History intelligence learns repeated patterns locally.';
   String voiceStatus = 'Voice input is prepared for offline plugins.';
-  List<String> steps = const [
-    'Swipe left on the display to delete the last character.',
-  ];
+  List<String> steps = const ['Tap = to evaluate.'];
   List<HistoryEntry> history = const [];
   List<SmartSuggestion> suggestions = const [];
   List<OffsetPoint> graphPoints = const [];
@@ -60,7 +58,7 @@ class CalculatorController extends ChangeNotifier {
       ),
       HistoryEntry(
         query: 'emi for \$250000 at 8.5% for 240 months',
-        expression: 'EMI',
+        expression: 'emi(250000,8.5,240)',
         result: '2169.42',
         mode: CalculatorMode.financial,
         timestamp: DateTime.now().subtract(const Duration(days: 1)),
@@ -84,6 +82,10 @@ class CalculatorController extends ChangeNotifier {
         'Visual Math Mode graphs the equation in real time.',
         'Try y=sin(x) or y=x^3-2*x.',
       ];
+    } else if (expression == 'y=x^2') {
+      expression = '0';
+      result = '0';
+      steps = const ['Ready for the next calculation.'];
     }
     notifyListeners();
   }
@@ -94,8 +96,13 @@ class CalculatorController extends ChangeNotifier {
   }
 
   void appendToken(String token) {
-    if (expression == '0' || expression == 'Error') {
+    final shouldReplace = expression == '0' || expression == 'Error';
+    if (shouldReplace && !_isOperator(token)) {
       expression = token;
+    } else if (token == '.' && _currentNumberSegment().contains('.')) {
+      return;
+    } else if (_isOperator(token)) {
+      expression = _appendOperator(token);
     } else {
       expression += token;
     }
@@ -103,10 +110,10 @@ class CalculatorController extends ChangeNotifier {
   }
 
   void backspace() {
-    if (expression.isEmpty) {
+    if (expression.isEmpty || expression == '0') {
       return;
     }
-    expression = expression.substring(0, expression.length - 1);
+    expression = expression.substring(0, expression.length - 1).trimRight();
     if (expression.isEmpty) {
       expression = '0';
     }
@@ -130,17 +137,14 @@ class CalculatorController extends ChangeNotifier {
   }
 
   void runSmartQuery([String? override]) {
-    final query = override ?? _queryController.text;
-    if (query.trim().isEmpty) {
+    final query = (override ?? _queryController.text).trim();
+    if (query.isEmpty) {
       return;
     }
     final intent = _smartQueryService.parse(query, mode);
     mode = intent.suggestedMode;
     _queryController.text = query;
     smartPrompt = query;
-    if (mode == CalculatorMode.visual) {
-      graphPoints = _engine.buildGraphPoints(intent.result.expression);
-    }
     _applyCalculation(
       intent.result,
       originalQuery: query,
@@ -154,7 +158,9 @@ class CalculatorController extends ChangeNotifier {
   }
 
   void toggleSign() {
-    if (expression.startsWith('-')) {
+    if (expression == '0') {
+      expression = '-';
+    } else if (expression.startsWith('-')) {
       expression = expression.substring(1);
     } else {
       expression = '-$expression';
@@ -165,8 +171,8 @@ class CalculatorController extends ChangeNotifier {
   void longPressFunction(String token) {
     final alternate = switch (token) {
       '%' => 'sqrt(',
-      '÷' => 'log(',
-      '×' => 'sin(',
+      '/' => 'log(',
+      '*' => 'sin(',
       '-' => 'cos(',
       '+' => 'tan(',
       _ => token,
@@ -177,13 +183,13 @@ class CalculatorController extends ChangeNotifier {
   String modeSubtitle() {
     return switch (mode) {
       CalculatorMode.focus =>
-        'Minimal input, smart shortcuts, and quick arithmetic.',
+        'Fast arithmetic with a distraction-free layout.',
       CalculatorMode.scientific =>
         'Trig, logs, powers, and engineering-style calculations.',
       CalculatorMode.programmer =>
         'Base conversions and bitwise operations for binary workflows.',
       CalculatorMode.financial =>
-        'EMI, interest, tax, and everyday money intelligence.',
+        'EMI, interest, tax, and money calculations.',
       CalculatorMode.visual =>
         'Graph equations and inspect step-by-step math behavior.',
     };
@@ -191,15 +197,19 @@ class CalculatorController extends ChangeNotifier {
 
   String smartBannerTitle() {
     return switch (mode) {
-      CalculatorMode.programmer => 'Binary insight ready',
-      CalculatorMode.financial => 'Finance intelligence ready',
-      CalculatorMode.visual => 'Graph intelligence ready',
-      _ => 'Smart calculation ready',
+      CalculatorMode.programmer => 'Programmer assistant',
+      CalculatorMode.financial => 'Finance assistant',
+      CalculatorMode.visual => 'Visual math assistant',
+      _ => 'Smart AI assistant',
     };
   }
 
   String accessibilitySummary() {
     return '${_voiceService.inputHint()} ${_voiceService.speakHint(result)}';
+  }
+
+  String formattedExpression() {
+    return expression.replaceAll('*', '×').replaceAll('/', '÷');
   }
 
   void _evaluateCurrent() {
@@ -226,7 +236,7 @@ class CalculatorController extends ChangeNotifier {
     result = calculation.result;
     steps = calculation.steps;
     insight = calculation.note ??
-        'Shortcut suggestion: long-press operators for advanced functions.';
+        'Suggestion: use Smart AI for natural-language calculations.';
     voiceStatus = _voiceService.speakHint(result);
     if (selectedMode == CalculatorMode.visual) {
       graphPoints = _engine.buildGraphPoints(calculation.expression);
@@ -241,9 +251,31 @@ class CalculatorController extends ChangeNotifier {
         note: calculation.note,
       ),
       ...history,
-    ].take(10).toList();
+    ].take(12).toList();
     suggestions = _historyService.buildSuggestions(history);
     notifyListeners();
+  }
+
+  bool _isOperator(String token) {
+    return token == '+' || token == '-' || token == '*' || token == '/';
+  }
+
+  String _appendOperator(String token) {
+    final trimmed = expression.trimRight();
+    if (trimmed.isEmpty || trimmed == '0') {
+      return token == '-' ? '-' : '0 $token ';
+    }
+
+    final lastChar = trimmed.substring(trimmed.length - 1);
+    if (_isOperator(lastChar)) {
+      return '${trimmed.substring(0, trimmed.length - 1)}$token ';
+    }
+    return '$trimmed $token ';
+  }
+
+  String _currentNumberSegment() {
+    final segments = expression.split(RegExp(r'[+\-*/()]'));
+    return segments.isEmpty ? '' : segments.last.trim();
   }
 
   @override

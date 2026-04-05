@@ -21,22 +21,23 @@ class SmartQueryService {
     }
 
     final splitMatch = RegExp(
-      r'split \$?([\d.]+) among (\d+) people with (\d+)% tip',
+      r'split \$?([\d.]+) among (\d+) people with (\d+(\.\d+)?)% tip',
     ).firstMatch(normalized);
     if (splitMatch != null) {
       final amount = double.parse(splitMatch.group(1)!);
       final people = int.parse(splitMatch.group(2)!);
       final tip = double.parse(splitMatch.group(3)!);
-      final total = amount + (amount * tip / 100);
+      final tipValue = amount * tip / 100;
+      final total = amount + tipValue;
       final each = total / people;
       return CalculationIntent(
         result: CalculationResult(
           input: query,
-          expression: '($amount + ${amount * tip / 100}) / $people',
+          expression: '($amount + $tipValue) / $people',
           result: each.toStringAsFixed(2),
           steps: [
-            'Tip = ${(amount * tip / 100).toStringAsFixed(2)}',
-            'Total with tip = ${total.toStringAsFixed(2)}',
+            'Base amount = ${amount.toStringAsFixed(2)}',
+            'Tip = ${tipValue.toStringAsFixed(2)}',
             'Per person = ${each.toStringAsFixed(2)}',
           ],
         ),
@@ -48,12 +49,9 @@ class SmartQueryService {
       r'emi for \$?([\d.]+) at (\d+(\.\d+)?)% for (\d+) months',
     ).firstMatch(normalized);
     if (emiMatch != null) {
-      final principal = emiMatch.group(1)!;
-      final rate = emiMatch.group(2)!;
-      final months = emiMatch.group(4)!;
       return CalculationIntent(
         result: _engine.evaluate(
-          'emi($principal,$rate,$months)',
+          'emi(${emiMatch.group(1)},${emiMatch.group(2)},${emiMatch.group(4)})',
           CalculatorMode.financial,
         ),
         suggestedMode: CalculatorMode.financial,
@@ -85,18 +83,30 @@ class SmartQueryService {
       );
     }
 
+    final visualMatch = RegExp(r'^(y\s*=.+|graph\s+.+)$').firstMatch(normalized);
+    if (visualMatch != null) {
+      final expression = normalized.startsWith('graph ')
+          ? 'y=${normalized.substring(6).trim()}'
+          : normalized;
+      return CalculationIntent(
+        result: _engine.evaluate(expression, CalculatorMode.visual),
+        suggestedMode: CalculatorMode.visual,
+      );
+    }
+
     final arithmetic = normalized
-        .replaceAll('plus', '+')
-        .replaceAll('minus', '-')
-        .replaceAll('times', '*')
         .replaceAll('multiplied by', '*')
-        .replaceAll('divided by', '/');
+        .replaceAll('divided by', '/')
+        .replaceAll('times', '*')
+        .replaceAll('plus', '+')
+        .replaceAll('minus', '-');
 
     final suggestedMode =
         normalized.contains('sin') ||
                 normalized.contains('cos') ||
                 normalized.contains('tan') ||
-                normalized.contains('log')
+                normalized.contains('log') ||
+                normalized.contains('sqrt')
             ? CalculatorMode.scientific
             : currentMode;
 
