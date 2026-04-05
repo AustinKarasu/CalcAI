@@ -11,6 +11,11 @@ void main() {
     expect(result.result, '16');
   });
 
+  test('supports modulo expressions', () {
+    final result = engine.evaluate('17 % 5', CalculatorMode.focus);
+    expect(result.result, '2');
+  });
+
   test('evaluates scientific expressions', () {
     final result = engine.evaluate('sqrt(81)', CalculatorMode.scientific);
     expect(result.result, '9');
@@ -24,5 +29,10 @@ void main() {
   test('handles programmer bitwise expressions', () {
     final result = engine.evaluate('0b1010 & 0b1100', CalculatorMode.programmer);
     expect(result.result, '8');
+  });
+
+  test('handles plain hex programmer values', () {
+    final result = engine.evaluate('ff', CalculatorMode.programmer);
+    expect(result.result, '255');
   });
 }

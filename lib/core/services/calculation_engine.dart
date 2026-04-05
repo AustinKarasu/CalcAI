@@ -5,7 +5,7 @@ import '../models/calculator_mode.dart';
 
 class CalculationEngine {
   CalculationResult evaluate(String input, CalculatorMode mode) {
-    final normalized = _normalize(input);
+    final normalized = normalize(input);
     switch (mode) {
       case CalculatorMode.programmer:
         return _evaluateProgrammer(normalized);
@@ -19,8 +19,18 @@ class CalculationEngine {
     }
   }
 
+  String normalize(String source) {
+    return source
+        .replaceAll('×', '*')
+        .replaceAll('÷', '/')
+        .replaceAll('−', '-')
+        .replaceAll('π', '${math.pi}')
+        .replaceAll('pi', '${math.pi}')
+        .replaceAll('^', '**');
+  }
+
   List<OffsetPoint> buildGraphPoints(String expression) {
-    final sanitized = _normalize(
+    final sanitized = normalize(
       expression.replaceAll('y=', '').replaceAll(' ', ''),
     );
     final points = <OffsetPoint>[];
@@ -49,14 +59,27 @@ class CalculationEngine {
       input: expression,
       expression: expression,
       result: _format(value),
-      steps: _buildSteps(expression, value),
+      steps: [
+        'Expression: $expression',
+        'Computed locally on-device.',
+        'Result = ${_format(value)}',
+      ],
     );
   }
 
   CalculationResult _evaluateProgrammer(String expression) {
     final compact = expression.toLowerCase().replaceAll(' ', '');
+    if (compact.isEmpty) {
+      return const CalculationResult(
+        input: '',
+        expression: '',
+        result: '0',
+        steps: ['Enter binary, hex, or decimal values.'],
+      );
+    }
+
     final bitwiseMatch = RegExp(
-      r'^(0b[01]+|0x[a-f0-9]+|\d+)(<<|>>|&|\||\^)(0b[01]+|0x[a-f0-9]+|\d+)$',
+      r'^(0b[01]+|0x[a-f0-9]+|[a-f0-9]+)(<<|>>|&|\||\^)(0b[01]+|0x[a-f0-9]+|[a-f0-9]+)$',
     ).firstMatch(compact);
     if (bitwiseMatch != null) {
       final left = _parseInt(bitwiseMatch.group(1)!);
@@ -99,7 +122,8 @@ class CalculationEngine {
   CalculationResult _evaluateFinancial(String expression) {
     final compact = expression.replaceAll(' ', '');
 
-    final emiMatch = RegExp(r'emi\(([\d.]+),([\d.]+),([\d.]+)\)').firstMatch(compact);
+    final emiMatch =
+        RegExp(r'emi\(([\d.]+),([\d.]+),([\d.]+)\)').firstMatch(compact);
     if (emiMatch != null) {
       final principal = double.parse(emiMatch.group(1)!);
       final annualRate = double.parse(emiMatch.group(2)!);
@@ -185,24 +209,6 @@ class CalculationEngine {
     );
   }
 
-  String _normalize(String source) {
-    return source
-        .replaceAll('×', '*')
-        .replaceAll('÷', '/')
-        .replaceAll('−', '-')
-        .replaceAll('π', '${math.pi}')
-        .replaceAll('pi', '${math.pi}')
-        .replaceAll('^', '**');
-  }
-
-  List<String> _buildSteps(String expression, double value) {
-    return [
-      'Expression: $expression',
-      'Computed locally on-device.',
-      'Result = ${_format(value)}',
-    ];
-  }
-
   double? _safeEval(String expression) {
     try {
       return _ExpressionParser(expression).parse();
@@ -217,6 +223,10 @@ class CalculationEngine {
     }
     if (value.startsWith('0x')) {
       return int.parse(value.substring(2), radix: 16);
+    }
+    if (RegExp(r'^[a-f0-9]+$').hasMatch(value) &&
+        RegExp(r'[a-f]').hasMatch(value)) {
+      return int.parse(value, radix: 16);
     }
     return int.parse(value);
   }
@@ -282,6 +292,8 @@ class _ExpressionParser {
         value *= _parsePower();
       } else if (_match('/')) {
         value /= _parsePower();
+      } else if (_match('%')) {
+        value %= _parsePower();
       } else {
         return value;
       }

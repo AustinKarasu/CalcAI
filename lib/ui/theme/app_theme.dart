@@ -29,6 +29,30 @@ class AppTheme {
           text: Colors.white,
           muted: Color(0xFF96A3BF),
         ),
+      AppThemeMode.sunset => const _Palette(
+          background: Color(0xFF160B0A),
+          surface: Color(0xFF251414),
+          primary: Color(0xFFFFB454),
+          secondary: Color(0xFFFF6B6B),
+          text: Colors.white,
+          muted: Color(0xFFB8917A),
+        ),
+      AppThemeMode.forest => const _Palette(
+          background: Color(0xFF08110E),
+          surface: Color(0xFF13201A),
+          primary: Color(0xFF67F0B5),
+          secondary: Color(0xFF2EC27E),
+          text: Colors.white,
+          muted: Color(0xFF86A894),
+        ),
+      AppThemeMode.mono => const _Palette(
+          background: Color(0xFF0A0A0A),
+          surface: Color(0xFF181818),
+          primary: Color(0xFFF3F3F3),
+          secondary: Color(0xFF8F8F8F),
+          text: Colors.white,
+          muted: Color(0xFF707070),
+        ),
     };
 
     return ThemeData(

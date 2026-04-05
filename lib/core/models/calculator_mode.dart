@@ -13,7 +13,10 @@ enum CalculatorMode {
 enum AppThemeMode {
   dark('Dark'),
   neon('Neon'),
-  glass('Glass');
+  glass('Glass'),
+  sunset('Sunset'),
+  forest('Forest'),
+  mono('Mono');
 
   const AppThemeMode(this.label);
 

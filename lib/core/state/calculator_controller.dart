@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/calculation_result.dart';
 import '../models/calculator_mode.dart';
@@ -51,7 +52,15 @@ class CalculatorController extends ChangeNotifier {
   String result = '37.5';
   String smartPrompt = 'split \$150 among 4 people with 10% tip';
   String insight = 'History intelligence learns repeated patterns locally.';
-  String voiceStatus = 'Voice input is prepared for offline plugins.';
+  String voiceStatus = 'Voice input is ready.';
+  String speechTranscript = '';
+  String speechExpression = '';
+  bool speechAvailable = false;
+  bool isListening = false;
+  bool livePreviewEnabled = true;
+  bool saveHistoryEnabled = true;
+  bool smartSuggestionsEnabled = true;
+  bool speechAutoApplyEnabled = true;
   List<String> steps = const ['Tap = to evaluate.'];
   List<HistoryEntry> history = const [];
   List<SmartSuggestion> suggestions = const [];
@@ -72,12 +81,16 @@ class CalculatorController extends ChangeNotifier {
       mode = persisted.mode;
       activeTheme = persisted.theme;
       history = persisted.history;
+      livePreviewEnabled = persisted.livePreview;
+      saveHistoryEnabled = persisted.saveHistory;
+      smartSuggestionsEnabled = persisted.smartSuggestions;
+      speechAutoApplyEnabled = persisted.speechAutoApply;
     } else {
       _seedDemoHistory();
     }
 
     _queryController.text = smartPrompt;
-    suggestions = _historyService.buildSuggestions(history);
+    _refreshSuggestions();
     if (mode == CalculatorMode.visual) {
       graphPoints = _engine.buildGraphPoints(expression);
     }
@@ -88,12 +101,25 @@ class CalculatorController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void openSettingsPage() {
+    setBottomTab(4);
+  }
+
+  void clearHistory() {
+    history = const [];
+    insight = 'History cleared. New calculation patterns will appear here.';
+    _refreshSuggestions();
+    _persistAndNotify();
+  }
+
   void setMode(CalculatorMode next) {
     mode = next;
     if (mode == CalculatorMode.visual) {
-      expression = 'y=x^2';
+      if (!expression.contains('x')) {
+        expression = 'y=x^2';
+      }
       graphPoints = _engine.buildGraphPoints(expression);
-      result = '${graphPoints.length} plot points';
+      result = graphPoints.isEmpty ? 'No graph' : '${graphPoints.length} plot points';
       steps = const [
         'Visual Math Mode graphs the equation in real time.',
         'Try y=sin(x), y=x^3-2*x, or graph x*x+3.',
@@ -113,9 +139,36 @@ class CalculatorController extends ChangeNotifier {
     _persistAndNotify();
   }
 
-  void appendToken(String token) {
-    final shouldReplace = expression == '0' || expression == 'Error';
-    if (shouldReplace && !_isBinaryOperator(token)) {
+  void setLivePreview(bool value) {
+    livePreviewEnabled = value;
+    if (livePreviewEnabled) {
+      _evaluateCurrent();
+    }
+    _persistAndNotify();
+  }
+
+  void setSaveHistory(bool value) {
+    saveHistoryEnabled = value;
+    if (!value) {
+      history = const [];
+    }
+    _refreshSuggestions();
+    _persistAndNotify();
+  }
+
+  void setSmartSuggestions(bool value) {
+    smartSuggestionsEnabled = value;
+    _refreshSuggestions();
+    _persistAndNotify();
+  }
+
+  void setSpeechAutoApply(bool value) {
+    speechAutoApplyEnabled = value;
+    _persistAndNotify();
+  }
+
+  Future<void> appendToken(String token) async {
+    if (_shouldInsertAsFreshToken(token)) {
       expression = token;
     } else if (token == '.' && _currentNumberSegment().contains('.')) {
       return;
@@ -124,11 +177,10 @@ class CalculatorController extends ChangeNotifier {
     } else {
       expression += token;
     }
-    _evaluateCurrent();
-    _persistAndNotify();
+    await _afterInputChanged();
   }
 
-  void backspace() {
+  Future<void> backspace() async {
     if (expression.isEmpty || expression == '0') {
       return;
     }
@@ -136,8 +188,7 @@ class CalculatorController extends ChangeNotifier {
     if (expression.isEmpty) {
       expression = '0';
     }
-    _evaluateCurrent();
-    _persistAndNotify();
+    await _afterInputChanged();
   }
 
   void clear() {
@@ -148,7 +199,8 @@ class CalculatorController extends ChangeNotifier {
   }
 
   void evaluateExpression() {
-    final calculation = _engine.evaluate(expression, mode);
+    final sanitized = _sanitizeForEvaluation(expression);
+    final calculation = _engine.evaluate(sanitized, mode);
     _applyCalculation(
       calculation,
       originalQuery: expression,
@@ -176,7 +228,7 @@ class CalculatorController extends ChangeNotifier {
     runSmartQuery(suggestion.prefill);
   }
 
-  void toggleSign() {
+  Future<void> toggleSign() async {
     if (expression == '0') {
       expression = '-';
     } else if (expression.startsWith('-')) {
@@ -184,11 +236,10 @@ class CalculatorController extends ChangeNotifier {
     } else {
       expression = '-$expression';
     }
-    _evaluateCurrent();
-    _persistAndNotify();
+    await _afterInputChanged();
   }
 
-  void longPressFunction(String token) {
+  Future<void> longPressFunction(String token) async {
     final alternate = switch (token) {
       '%' => 'sqrt(',
       '/' => 'log(',
@@ -197,7 +248,91 @@ class CalculatorController extends ChangeNotifier {
       '+' => 'tan(',
       _ => token,
     };
-    appendToken(alternate);
+    if (expression == '0' || expression == 'Error') {
+      expression = alternate;
+    } else {
+      expression += alternate;
+    }
+    await _afterInputChanged();
+  }
+
+  Future<void> insertFunction(String functionName) async {
+    final token = '$functionName(';
+    if (expression == '0' || expression == 'Error') {
+      expression = token;
+    } else {
+      expression += token;
+    }
+    await _afterInputChanged();
+  }
+
+  Future<void> insertProgrammerToken(String token) async {
+    if (_isProgrammerOperator(token)) {
+      if (expression == '0') {
+        return;
+      }
+      expression = '${expression.trim()} $token ';
+    } else if (expression == '0' || expression == 'Error') {
+      expression = token;
+    } else {
+      expression += token;
+    }
+    await _afterInputChanged();
+  }
+
+  Future<void> startVoiceCapture() async {
+    speechAvailable = await _voiceService.initialize();
+    if (!speechAvailable) {
+      voiceStatus = 'Speech recognition is unavailable on this device.';
+      notifyListeners();
+      return;
+    }
+
+    isListening = true;
+    voiceStatus = 'Listening... say numbers and operators like plus or divide.';
+    notifyListeners();
+    await _voiceService.startListening(
+      onTranscript: (transcript, isFinal) {
+        speechTranscript = transcript;
+        speechExpression = _voiceService.normalizeSpokenMath(transcript);
+        if (isFinal) {
+          isListening = false;
+          voiceStatus = 'Captured voice command.';
+          if (speechAutoApplyEnabled && speechExpression.isNotEmpty) {
+            expression = speechExpression;
+            _evaluateCurrent();
+            _persistAndNotify();
+          } else {
+            notifyListeners();
+          }
+        } else {
+          notifyListeners();
+        }
+      },
+    );
+  }
+
+  Future<void> stopVoiceCapture() async {
+    await _voiceService.stopListening();
+    isListening = false;
+    voiceStatus = 'Voice capture stopped.';
+    notifyListeners();
+  }
+
+  Future<void> applySpeechToCalculator() async {
+    if (speechExpression.isEmpty) {
+      return;
+    }
+    expression = speechExpression;
+    await _afterInputChanged();
+  }
+
+  void applySpeechToSmartAi() {
+    if (speechTranscript.isEmpty) {
+      return;
+    }
+    _queryController.text = speechTranscript;
+    runSmartQuery(speechTranscript);
   }
 
   String modeSubtitle() {
@@ -207,7 +342,7 @@ class CalculatorController extends ChangeNotifier {
       CalculatorMode.scientific =>
         'Trig, logs, powers, and engineering-style calculations.',
       CalculatorMode.programmer =>
-        'Base conversions and bitwise operations for binary workflows.',
+        'Base conversions, bitwise operators, and hex/binary input.',
       CalculatorMode.financial =>
         'EMI, interest, tax, and money calculations.',
       CalculatorMode.visual =>
@@ -229,7 +364,30 @@ class CalculatorController extends ChangeNotifier {
   }
 
   String formattedExpression() {
-    return expression.replaceAll('*', 'x').replaceAll('/', '/');
+    return expression.replaceAll('*', 'x');
+  }
+
+  List<String> numbersUsedFor(HistoryEntry entry) {
+    return RegExp(r'-?\d+(\.\d+)?')
+        .allMatches(entry.expression)
+        .map((match) => match.group(0)!)
+        .toList();
+  }
+
+  List<String> quickScientificFunctions() {
+    return const ['sin', 'cos', 'tan', 'log', 'sqrt', 'ln'];
+  }
+
+  List<String> programmerShortcutTokens() {
+    return const ['A', 'B', 'C', 'D', 'E', 'F', '0b', '0x', '&', '|', '^', '<<', '>>'];
+  }
+
+  Future<void> _afterInputChanged() async {
+    if (livePreviewEnabled) {
+      _evaluateCurrent();
+    }
+    await HapticFeedback.selectionClick();
+    _persistAndNotify();
   }
 
   void _evaluateCurrent() {
@@ -241,9 +399,42 @@ class CalculatorController extends ChangeNotifier {
       return;
     }
 
+    final preview = _previewForExpression(expression);
+    if (preview != null) {
+      result = preview;
+      steps = const ['Waiting for the rest of the expression.'];
+      return;
+    }
+
     final calculation = _engine.evaluate(expression, mode);
     result = calculation.result;
     steps = calculation.steps;
+  }
+
+  String? _previewForExpression(String current) {
+    final trimmed = current.trim();
+    if (trimmed.isEmpty) {
+      return '0';
+    }
+
+    if (_isProgrammerOperatorSuffix(trimmed)) {
+      final fallback = trimmed.replaceFirst(RegExp(r'(\s*(<<|>>|[&|^])\s*)$'), '');
+      if (fallback.isNotEmpty) {
+        final calculation = _engine.evaluate(fallback, mode);
+        return calculation.result == 'Error' ? null : calculation.result;
+      }
+    }
+
+    if (_isIncompleteExpression(trimmed)) {
+      final fallback = _sanitizeForEvaluation(trimmed);
+      if (fallback == trimmed && !_looksLikeStandaloneValue(trimmed)) {
+        return result;
+      }
+      final calculation = _engine.evaluate(fallback, mode);
+      return calculation.result == 'Error' ? result : calculation.result;
+    }
+
+    return null;
   }
 
   void _applyCalculation(
@@ -260,23 +451,44 @@ class CalculatorController extends ChangeNotifier {
     if (selectedMode == CalculatorMode.visual) {
       graphPoints = _engine.buildGraphPoints(calculation.expression);
     }
-    history = [
-      HistoryEntry(
-        query: originalQuery,
-        expression: calculation.expression,
-        result: calculation.result,
-        mode: selectedMode,
-        timestamp: DateTime.now(),
-        note: calculation.note,
-      ),
-      ...history,
-    ].take(20).toList();
-    suggestions = _historyService.buildSuggestions(history);
+    if (saveHistoryEnabled) {
+      history = [
+        HistoryEntry(
+          query: originalQuery,
+          expression: calculation.expression,
+          result: calculation.result,
+          mode: selectedMode,
+          timestamp: DateTime.now(),
+          note: calculation.note,
+        ),
+        ...history,
+      ].take(20).toList();
+    }
+    _refreshSuggestions();
     _persistAndNotify();
   }
 
+  void _refreshSuggestions() {
+    suggestions = smartSuggestionsEnabled
+        ? _historyService.buildSuggestions(history)
+        : const [];
+  }
+
+  bool _shouldInsertAsFreshToken(String token) {
+    final shouldReplace = expression == '0' || expression == 'Error';
+    return shouldReplace && !_isBinaryOperator(token) && !_isProgrammerOperator(token);
+  }
+
   bool _isBinaryOperator(String token) {
-    return token == '+' || token == '-' || token == '*' || token == '/';
+    return token == '+' || token == '-' || token == '*' || token == '/' || token == '%';
+  }
+
+  bool _isProgrammerOperator(String token) {
+    return token == '&' || token == '|' || token == '^' || token == '<<' || token == '>>';
+  }
+
+  bool _isProgrammerOperatorSuffix(String text) {
+    return RegExp(r'(<<|>>|[&|^])$').hasMatch(text.trim());
   }
 
   String _appendOperator(String token) {
@@ -285,16 +497,47 @@ class CalculatorController extends ChangeNotifier {
       return token == '-' ? '-' : '0 $token ';
     }
 
-    final lastChar = trimmed.substring(trimmed.length - 1);
-    if (_isBinaryOperator(lastChar)) {
+    final operatorMatch = RegExp(r'([+\-*/%])$').firstMatch(trimmed);
+    if (operatorMatch != null) {
       return '${trimmed.substring(0, trimmed.length - 1)}$token ';
     }
     return '$trimmed $token ';
   }
 
   String _currentNumberSegment() {
-    final segments = expression.split(RegExp(r'[+\-*/()]'));
+    final segments = expression.split(RegExp(r'[+\-*/%()]'));
     return segments.isEmpty ? '' : segments.last.trim();
+  }
+
+  bool _isIncompleteExpression(String text) {
+    if (RegExp(r'[+\-*/%]$').hasMatch(text)) {
+      return true;
+    }
+    final openParens = '('.allMatches(text).length;
+    final closeParens = ')'.allMatches(text).length;
+    if (openParens > closeParens) {
+      return true;
+    }
+    if (RegExp(r'(sin|cos|tan|log|sqrt|ln)\($').hasMatch(text)) {
+      return true;
+    }
+    return false;
+  }
+
+  bool _looksLikeStandaloneValue(String text) {
+    if (mode == CalculatorMode.programmer) {
+      return RegExp(r'^(0b[01]+|0x[a-fA-F0-9]+|[A-Fa-f0-9]+)$').hasMatch(text);
+    }
+    return RegExp(r'^-?\d+(\.\d+)?$').hasMatch(text);
+  }
+
+  String _sanitizeForEvaluation(String text) {
+    var sanitized = text.trim();
+    sanitized = sanitized.replaceFirst(RegExp(r'[+\-*/%]+$'), '').trimRight();
+    while ('('.allMatches(sanitized).length > ')'.allMatches(sanitized).length) {
+      sanitized += ')';
+    }
+    return sanitized.isEmpty ? '0' : sanitized;
   }
 
   void _seedDemoHistory() {
@@ -307,9 +550,9 @@ class CalculatorController extends ChangeNotifier {
         timestamp: DateTime.now().subtract(const Duration(minutes: 22)),
       ),
       HistoryEntry(
-        query: '5 km to miles',
-        expression: '5 km -> miles',
-        result: '3.1069',
+        query: 'what is 25% of 400',
+        expression: '(25 / 100) * 400',
+        result: '100.00',
         mode: CalculatorMode.focus,
         timestamp: DateTime.now().subtract(const Duration(hours: 3)),
       ),
@@ -321,7 +564,7 @@ class CalculatorController extends ChangeNotifier {
         timestamp: DateTime.now().subtract(const Duration(days: 1)),
       ),
     ];
-    suggestions = _historyService.buildSuggestions(history);
+    _refreshSuggestions();
   }
 
   void _persistAndNotify() {
@@ -336,6 +579,10 @@ class CalculatorController extends ChangeNotifier {
           mode: mode,
           theme: activeTheme,
           history: history,
+          livePreview: livePreviewEnabled,
+          saveHistory: saveHistoryEnabled,
+          smartSuggestions: smartSuggestionsEnabled,
+          speechAutoApply: speechAutoApplyEnabled,
         ),
       ),
     );
@@ -344,6 +591,9 @@ class CalculatorController extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (isListening) {
+      unawaited(_voiceService.stopListening());
+    }
     _queryController.dispose();
     super.dispose();
   }

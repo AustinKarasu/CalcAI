@@ -14,6 +14,10 @@ class AppStorage {
   static const _modeKey = 'mode';
   static const _themeKey = 'theme';
   static const _historyKey = 'history';
+  static const _livePreviewKey = 'live_preview';
+  static const _saveHistoryKey = 'save_history';
+  static const _smartSuggestionsKey = 'smart_suggestions';
+  static const _speechAutoApplyKey = 'speech_auto_apply';
 
   final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
 
@@ -30,6 +34,10 @@ class AppStorage {
     final themeName = await _prefs.getString(_themeKey);
     final stepsJson = await _prefs.getStringList(_stepsKey) ?? const <String>[];
     final historyRaw = await _prefs.getStringList(_historyKey) ?? const <String>[];
+    final livePreview = await _prefs.getBool(_livePreviewKey) ?? true;
+    final saveHistory = await _prefs.getBool(_saveHistoryKey) ?? true;
+    final smartSuggestions = await _prefs.getBool(_smartSuggestionsKey) ?? true;
+    final speechAutoApply = await _prefs.getBool(_speechAutoApplyKey) ?? true;
     final history = historyRaw
         .map((item) => jsonDecode(item) as Map<String, dynamic>)
         .map(HistoryEntry.fromJson)
@@ -44,6 +52,10 @@ class AppStorage {
       mode: CalculatorModeX.fromName(modeName),
       theme: AppThemeModeX.fromName(themeName),
       history: history,
+      livePreview: livePreview,
+      saveHistory: saveHistory,
+      smartSuggestions: smartSuggestions,
+      speechAutoApply: speechAutoApply,
     );
   }
 
@@ -55,6 +67,10 @@ class AppStorage {
     await _prefs.setStringList(_stepsKey, state.steps);
     await _prefs.setString(_modeKey, state.mode.name);
     await _prefs.setString(_themeKey, state.theme.name);
+    await _prefs.setBool(_livePreviewKey, state.livePreview);
+    await _prefs.setBool(_saveHistoryKey, state.saveHistory);
+    await _prefs.setBool(_smartSuggestionsKey, state.smartSuggestions);
+    await _prefs.setBool(_speechAutoApplyKey, state.speechAutoApply);
     await _prefs.setStringList(
       _historyKey,
       state.history.map((entry) => jsonEncode(entry.toJson())).toList(),
@@ -72,6 +88,10 @@ class PersistedAppState {
     required this.mode,
     required this.theme,
     required this.history,
+    required this.livePreview,
+    required this.saveHistory,
+    required this.smartSuggestions,
+    required this.speechAutoApply,
   });
 
   final String expression;
@@ -82,4 +102,8 @@ class PersistedAppState {
   final CalculatorMode mode;
   final AppThemeMode theme;
   final List<HistoryEntry> history;
+  final bool livePreview;
+  final bool saveHistory;
+  final bool smartSuggestions;
+  final bool speechAutoApply;
 }

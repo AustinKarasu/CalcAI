@@ -17,5 +17,6 @@ void main() {
 
     expect(find.text('Calculator'), findsWidgets);
     expect(find.text('AI'), findsOneWidget);
+    expect(find.text('Speech'), findsOneWidget);
   });
 }

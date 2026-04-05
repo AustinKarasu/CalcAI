@@ -28,8 +28,7 @@ class SmartQueryService {
       final people = int.parse(splitMatch.group(2)!);
       final tip = double.parse(splitMatch.group(3)!);
       final tipValue = amount * tip / 100;
-      final total = amount + tipValue;
-      final each = total / people;
+      final each = (amount + tipValue) / people;
       return CalculationIntent(
         result: CalculationResult(
           input: query,
@@ -40,6 +39,73 @@ class SmartQueryService {
             'Tip = ${tipValue.toStringAsFixed(2)}',
             'Per person = ${each.toStringAsFixed(2)}',
           ],
+        ),
+        suggestedMode: CalculatorMode.focus,
+      );
+    }
+
+    final percentMatch =
+        RegExp(r'what is (\d+(\.\d+)?)% of (\d+(\.\d+)?)').firstMatch(normalized);
+    if (percentMatch != null) {
+      final percent = double.parse(percentMatch.group(1)!);
+      final amount = double.parse(percentMatch.group(3)!);
+      final value = amount * percent / 100;
+      return CalculationIntent(
+        result: CalculationResult(
+          input: query,
+          expression: '($percent / 100) * $amount',
+          result: value.toStringAsFixed(2),
+          steps: [
+            'Convert percent to decimal = ${(percent / 100).toStringAsFixed(4)}',
+            'Multiply by base amount = ${value.toStringAsFixed(2)}',
+          ],
+        ),
+        suggestedMode: CalculatorMode.focus,
+      );
+    }
+
+    final squareRootMatch =
+        RegExp(r'(square root|sqrt) of (\d+(\.\d+)?)').firstMatch(normalized);
+    if (squareRootMatch != null) {
+      final value = squareRootMatch.group(2)!;
+      return CalculationIntent(
+        result: _engine.evaluate('sqrt($value)', CalculatorMode.scientific),
+        suggestedMode: CalculatorMode.scientific,
+      );
+    }
+
+    final powerMatch = RegExp(
+      r'(\d+(\.\d+)?) (to the power of|power) (\d+(\.\d+)?)',
+    ).firstMatch(normalized);
+    if (powerMatch != null) {
+      return CalculationIntent(
+        result: _engine.evaluate(
+          '${powerMatch.group(1)} ** ${powerMatch.group(4)}',
+          CalculatorMode.scientific,
+        ),
+        suggestedMode: CalculatorMode.scientific,
+      );
+    }
+
+    final multiplyMatch =
+        RegExp(r'multiply (\d+(\.\d+)?) by (\d+(\.\d+)?)').firstMatch(normalized);
+    if (multiplyMatch != null) {
+      return CalculationIntent(
+        result: _engine.evaluate(
+          '${multiplyMatch.group(1)} * ${multiplyMatch.group(3)}',
+          CalculatorMode.focus,
+        ),
+        suggestedMode: CalculatorMode.focus,
+      );
+    }
+
+    final divideMatch =
+        RegExp(r'divide (\d+(\.\d+)?) by (\d+(\.\d+)?)').firstMatch(normalized);
+    if (divideMatch != null) {
+      return CalculationIntent(
+        result: _engine.evaluate(
+          '${divideMatch.group(1)} / ${divideMatch.group(3)}',
+          CalculatorMode.focus,
         ),
         suggestedMode: CalculatorMode.focus,
       );
@@ -83,26 +149,6 @@ class SmartQueryService {
       );
     }
 
-    final percentMatch =
-        RegExp(r'what is (\d+(\.\d+)?)% of (\d+(\.\d+)?)').firstMatch(normalized);
-    if (percentMatch != null) {
-      final percent = double.parse(percentMatch.group(1)!);
-      final amount = double.parse(percentMatch.group(3)!);
-      final value = amount * percent / 100;
-      return CalculationIntent(
-        result: CalculationResult(
-          input: query,
-          expression: '($percent / 100) * $amount',
-          result: value.toStringAsFixed(2),
-          steps: [
-            'Convert percent to decimal = ${(percent / 100).toStringAsFixed(4)}',
-            'Multiply by base amount = ${value.toStringAsFixed(2)}',
-          ],
-        ),
-        suggestedMode: CalculatorMode.focus,
-      );
-    }
-
     final visualMatch = RegExp(r'^(y\s*=.+|graph\s+.+)$').firstMatch(normalized);
     if (visualMatch != null) {
       final expression = normalized.startsWith('graph ')
@@ -118,6 +164,7 @@ class SmartQueryService {
         .replaceAll('what is ', '')
         .replaceAll('calculate ', '')
         .replaceAll('multiplied by', '*')
+        .replaceAll('multiply by', '*')
         .replaceAll('divided by', '/')
         .replaceAll('times', '*')
         .replaceAll('plus', '+')
@@ -128,12 +175,32 @@ class SmartQueryService {
                 normalized.contains('cos') ||
                 normalized.contains('tan') ||
                 normalized.contains('log') ||
-                normalized.contains('sqrt')
+                normalized.contains('sqrt') ||
+                normalized.contains('power')
             ? CalculatorMode.scientific
             : currentMode;
 
+    final result = _engine.evaluate(arithmetic, suggestedMode);
+    if (result.result == 'Error') {
+      return CalculationIntent(
+        result: CalculationResult(
+          input: query,
+          expression: query,
+          result: 'Need math',
+          steps: const [
+            'Try requests like:',
+            'split \$120 among 3 people with 10% tip',
+            'what is 25% of 400',
+            'square root of 144',
+            '5 km to miles',
+          ],
+        ),
+        suggestedMode: currentMode,
+      );
+    }
+
     return CalculationIntent(
-      result: _engine.evaluate(arithmetic, suggestedMode),
+      result: result,
       suggestedMode: suggestedMode,
     );
   }

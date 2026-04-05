@@ -25,4 +25,14 @@ void main() {
     final intent = service.parse('5 km to miles', CalculatorMode.focus);
     expect(intent.result.result, '3.1069');
   });
+
+  test('parses square root queries', () {
+    final intent = service.parse('square root of 144', CalculatorMode.focus);
+    expect(intent.result.result, '12');
+  });
+
+  test('parses multiply phrasing', () {
+    final intent = service.parse('multiply 45 by 2', CalculatorMode.focus);
+    expect(intent.result.result, '90');
+  });
 }

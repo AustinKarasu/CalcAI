@@ -1,8 +1,10 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/calculator_mode.dart';
+import '../../core/models/history_entry.dart';
 import '../../core/models/smart_suggestion.dart';
 import '../../core/state/calculator_controller.dart';
 import '../widgets/graph_card.dart';
@@ -15,6 +17,8 @@ class CalculatorScreen extends StatelessWidget {
   });
 
   final CalculatorController controller;
+  static final Uri _releaseUri =
+      Uri.parse('https://github.com/AustinKarasu/CalcAI/releases/latest');
 
   @override
   Widget build(BuildContext context) {
@@ -41,8 +45,12 @@ class CalculatorScreen extends StatelessWidget {
                   children: [
                     _CalculatorPage(controller: controller),
                     _AiPage(controller: controller),
+                    _SpeechPage(controller: controller),
                     _HistoryPage(controller: controller),
-                    _SettingsPage(controller: controller),
+                    _SettingsPage(
+                      controller: controller,
+                      releaseUri: _releaseUri,
+                    ),
                   ],
                 ),
               ),
@@ -60,6 +68,10 @@ class CalculatorScreen extends StatelessWidget {
                   NavigationDestination(
                     icon: Icon(Icons.auto_awesome_rounded),
                     label: 'AI',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.history_rounded),
+                    label: 'Speech',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.history_rounded),
@@ -91,7 +103,11 @@ class _CalculatorPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _Header(title: 'Calculator', badge: 'CalcAI'),
+          _Header(
+            title: 'Calculator',
+            badge: 'CalcAI',
+            onSettingsTap: controller.openSettingsPage,
+          ),
           const SizedBox(height: 22),
           _DisplayCard(controller: controller),
           const SizedBox(height: 16),
@@ -111,6 +127,14 @@ class _CalculatorPage extends StatelessWidget {
               },
             ),
           ),
+          if (controller.mode == CalculatorMode.scientific) ...[
+            const SizedBox(height: 14),
+            _FunctionStrip(controller: controller),
+          ],
+          if (controller.mode == CalculatorMode.programmer) ...[
+            const SizedBox(height: 14),
+            _ProgrammerStrip(controller: controller),
+          ],
           const SizedBox(height: 16),
           if (controller.mode == CalculatorMode.visual)
             GraphCard(
@@ -135,13 +159,120 @@ class _AiPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       children: [
-        const _Header(title: 'Smart AI', badge: 'CalcAI'),
+        _Header(
+          title: 'Smart AI',
+          badge: 'CalcAI',
+          onSettingsTap: controller.openSettingsPage,
+        ),
         const SizedBox(height: 22),
         _SmartPromptCard(controller: controller),
         const SizedBox(height: 16),
         _InsightCards(controller: controller),
         const SizedBox(height: 16),
         _StepsCard(controller: controller),
+      ],
+    );
+  }
+}
+
+class _SpeechPage extends StatelessWidget {
+  const _SpeechPage({required this.controller});
+
+  final CalculatorController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      children: [
+        _Header(
+          title: 'Speech Input',
+          badge: 'CalcAI',
+          onSettingsTap: controller.openSettingsPage,
+        ),
+        const SizedBox(height: 22),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface.withValues(alpha: 0.82),
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Say math naturally', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text(
+                'Examples: "forty five plus six", "one hundred divided by four", "nine times eight".',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.68),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: controller.isListening
+                          ? null
+                          : controller.startVoiceCapture,
+                      icon: const Icon(Icons.mic),
+                      label: const Text('Start Listening'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: controller.isListening
+                          ? controller.stopVoiceCapture
+                          : null,
+                      icon: const Icon(Icons.stop_circle_outlined),
+                      label: const Text('Stop'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _SpeechDataCard(
+                title: 'Transcript',
+                value: controller.speechTranscript.isEmpty
+                    ? 'Waiting for spoken input.'
+                    : controller.speechTranscript,
+              ),
+              const SizedBox(height: 12),
+              _SpeechDataCard(
+                title: 'Expression',
+                value: controller.speechExpression.isEmpty
+                    ? 'Spoken operators become calculator symbols here.'
+                    : controller.speechExpression,
+              ),
+              const SizedBox(height: 12),
+              _SpeechDataCard(
+                title: 'Status',
+                value: controller.voiceStatus,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: controller.applySpeechToCalculator,
+                      child: const Text('Use In Calculator'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: controller.applySpeechToSmartAi,
+                      child: const Text('Ask Smart AI'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -158,7 +289,18 @@ class _HistoryPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Recent History', style: theme.textTheme.headlineSmall),
+        Row(
+          children: [
+            Expanded(
+              child: Text('Recent History', style: theme.textTheme.headlineSmall),
+            ),
+            TextButton.icon(
+              onPressed: controller.history.isEmpty ? null : controller.clearHistory,
+              icon: const Icon(Icons.delete_sweep_rounded),
+              label: const Text('Clear'),
+            ),
+          ],
+        ),
         const SizedBox(height: 8),
         Text(
           'Stored locally and used to suggest recurring calculations.',
@@ -167,46 +309,25 @@ class _HistoryPage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        for (final entry in controller.history)
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface.withValues(alpha: 0.82),
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(entry.query, style: theme.textTheme.titleMedium),
-                const SizedBox(height: 6),
-                Text(
-                  '${entry.expression} = ${entry.result}',
-                  style: TextStyle(
-                    color: theme.colorScheme.primary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${entry.mode.label} - ${entry.timestamp.hour.toString().padLeft(2, '0')}:${entry.timestamp.minute.toString().padLeft(2, '0')}',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.55),
-                  ),
-                ),
-              ],
-            ),
+        if (controller.history.isEmpty)
+          const _EmptyCard(
+            message: 'No history yet. Completed calculations will appear here.',
           ),
+        for (final entry in controller.history)
+          _HistoryEntryCard(entry: entry, controller: controller),
       ],
     );
   }
 }
 
 class _SettingsPage extends StatelessWidget {
-  const _SettingsPage({required this.controller});
+  const _SettingsPage({
+    required this.controller,
+    required this.releaseUri,
+  });
 
   final CalculatorController controller;
+  final Uri releaseUri;
 
   @override
   Widget build(BuildContext context) {
@@ -236,20 +357,44 @@ class _SettingsPage extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 20),
-        _InfoCard(
-          title: 'Release posture',
-          value:
-              'No backend is required for the current feature set, which lowers failure risk for an early public launch.',
-          icon: Icons.shield_rounded,
-          accent: theme.colorScheme.primary,
+        _SettingSwitchTile(
+          title: 'Live Preview',
+          subtitle: 'Show a safe preview while the expression is incomplete.',
+          value: controller.livePreviewEnabled,
+          onChanged: controller.setLivePreview,
+        ),
+        _SettingSwitchTile(
+          title: 'Save History',
+          subtitle: 'Store completed calculations locally for quick recall.',
+          value: controller.saveHistoryEnabled,
+          onChanged: controller.setSaveHistory,
+        ),
+        _SettingSwitchTile(
+          title: 'Smart Suggestions',
+          subtitle: 'Generate quick prompts from recent calculation patterns.',
+          value: controller.smartSuggestionsEnabled,
+          onChanged: controller.setSmartSuggestions,
+        ),
+        _SettingSwitchTile(
+          title: 'Speech Auto Apply',
+          subtitle: 'Send recognized speech straight into the calculator.',
+          value: controller.speechAutoApplyEnabled,
+          onChanged: controller.setSpeechAutoApply,
         ),
         const SizedBox(height: 12),
-        _InfoCard(
-          title: 'Accessibility',
-          value: controller.accessibilitySummary(),
-          icon: Icons.record_voice_over_rounded,
-          accent: theme.colorScheme.secondary,
+        FilledButton.icon(
+          onPressed: () => launchUrl(releaseUri, mode: LaunchMode.externalApplication),
+          icon: const Icon(Icons.system_update_alt_rounded),
+          label: const Text('Check For Updates'),
         ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: controller.history.isEmpty ? null : controller.clearHistory,
+          icon: const Icon(Icons.delete_outline_rounded),
+          label: const Text('Clear History'),
+        ),
+        const SizedBox(height: 20),
+        _CreditsCard(),
       ],
     );
   }
@@ -259,10 +404,12 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.title,
     required this.badge,
+    required this.onSettingsTap,
   });
 
   final String title;
   final String badge;
+  final VoidCallback onSettingsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -289,7 +436,11 @@ class _Header extends StatelessWidget {
             ],
           ),
         ),
-        Icon(Icons.tune_rounded, color: theme.colorScheme.primary),
+        IconButton(
+          onPressed: onSettingsTap,
+          icon: Icon(Icons.settings_rounded, color: theme.colorScheme.primary),
+          tooltip: 'Settings',
+        ),
       ],
     );
   }
@@ -361,6 +512,56 @@ class _DisplayCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _FunctionStrip extends StatelessWidget {
+  const _FunctionStrip({required this.controller});
+
+  final CalculatorController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 42,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: controller.quickScientificFunctions().length,
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
+        itemBuilder: (context, index) {
+          final function = controller.quickScientificFunctions()[index];
+          return ActionChip(
+            label: Text(function),
+            onPressed: () => controller.insertFunction(function),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ProgrammerStrip extends StatelessWidget {
+  const _ProgrammerStrip({required this.controller});
+
+  final CalculatorController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 42,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: controller.programmerShortcutTokens().length,
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
+        itemBuilder: (context, index) {
+          final token = controller.programmerShortcutTokens()[index];
+          return ActionChip(
+            label: Text(token),
+            onPressed: () => controller.insertProgrammerToken(token),
+          );
+        },
       ),
     );
   }
@@ -608,6 +809,206 @@ class _InfoCard extends StatelessWidget {
   }
 }
 
+class _SpeechDataCard extends StatelessWidget {
+  const _SpeechDataCard({
+    required this.title,
+    required this.value,
+  });
+
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: theme.textTheme.titleMedium?.copyWith(fontSize: 14)),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.72),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingSwitchTile extends StatelessWidget {
+  const _SettingSwitchTile({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: theme.textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.62),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(value: value, onChanged: onChanged),
+        ],
+      ),
+    );
+  }
+}
+
+class _CreditsCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Credits', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 10),
+          Text(
+            'Built for AayanKarasu, 18yo developer, editor, designer, vibe coder, and ethical hacker.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Creative direction, release ambition, and product energy led by AayanKarasu.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.74),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'CalcAI is shaped to feel fast, sharp, expressive, and practical for everyday use.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.74),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryEntryCard extends StatelessWidget {
+  const _HistoryEntryCard({
+    required this.entry,
+    required this.controller,
+  });
+
+  final HistoryEntry entry;
+  final CalculatorController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final numbers = controller.numbersUsedFor(entry);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(entry.query, style: theme.textTheme.titleMedium),
+          const SizedBox(height: 6),
+          Text(
+            '${entry.expression} = ${entry.result}',
+            style: TextStyle(
+              color: theme.colorScheme.primary,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Numbers used: ${numbers.isEmpty ? 'None' : numbers.join(', ')}',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${entry.mode.label} - ${entry.timestamp.hour.toString().padLeft(2, '0')}:${entry.timestamp.minute.toString().padLeft(2, '0')}',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.55),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyCard extends StatelessWidget {
+  const _EmptyCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Text(
+        message,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: Colors.white.withValues(alpha: 0.7),
+        ),
+      ),
+    );
+  }
+}
+
 class _Keypad extends StatelessWidget {
   const _Keypad({required this.controller});
 
@@ -646,7 +1047,11 @@ class _Keypad extends StatelessWidget {
           ),
         const SizedBox(height: 8),
         Text(
-          'Long press operators for scientific shortcuts. Swipe left to delete.',
+          controller.mode == CalculatorMode.scientific
+              ? 'Long press operators or use the function strip for scientific shortcuts.'
+              : controller.mode == CalculatorMode.programmer
+                  ? 'Use the programmer strip for A-F, 0b, 0x, and bitwise operators.'
+                  : 'Swipe left to delete. Incomplete expressions keep a safe preview.',
           style: theme.textTheme.bodyMedium?.copyWith(
             color: Colors.white.withValues(alpha: 0.56),
           ),
